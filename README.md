@@ -1,16 +1,16 @@
 # Unifi-websocket-interface
 A Websocket client for Unifi Controller and an example RPi based display program.
 
-The websocket client is `unifi_client.py`
+The websocket client is `unifi_client.py` or `unify_client_2.py`
 
 You can run it from the command line as an example, but mostly you would import it as a module.
 
-it should run under python 2 or 3, but it's really designed and tested under python 3.5.
+`unify_client.py` is designed for python 3, tested under python 3.5.
 It uses asyncio-http so you need to install `aiohttp` for python 3.x. You also need `asyncio` support.
 
-For Python 2 it uses `requests` and `websocket-client`, so you need to have both installed.
+`unifi_client_2.py` is for Python 2 it uses `requests` and `websocket-client`, so you need to have both installed.
 
-`unifi_client.py` can also optionally publish data to an mqtt topic, for which you need `paho-mqtt` installed.
+`unifi_client.py` and `unifi_client_2.py` can also optionally publish data to an mqtt topic, for which you need `paho-mqtt` installed.
 
 here is the help text:
 
