@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<data>
+	<version major="1" minor="442" />
+	<app_categories>
+		<app_category id="128" name="Instant messaging" />
+		<app_category id="129" name="P2P" />
+		<app_category id="131" name="File Transfer" />
+		<app_category id="132" name="Streaming Media" />
+		<app_category id="133" name="Mail and Collaboration" />
+		<app_category id="134" name="Voice over IP" />
+		<app_category id="135" name="Database" />
+		<app_category id="136" name="Games" />
+		<app_category id="137" name="Network Management" />
+		<app_category id="138" name="Remote Access Terminals" />
+		<app_category id="139" name="Bypass Proxies and Tunnels" />
+		<app_category id="140" name="Stock Market" />
+		<app_category id="141" name="Web" />
+		<app_category id="142" name="Security Update" />
+		<app_category id="143" name="Web IM" />
+		<app_category id="145" name="Business" />
+		<app_category id="146" name="Network Protocols" />
+		<app_category id="147" name="Network Protocols" />
+		<app_category id="148" name="Network Protocols" />
+		<app_category id="151" name="Private Protocol" />
+		<app_category id="152" name="Social Network" />
+		<app_category id="128" name="Instant messengers" />
+		<app_category id="129" name="Peer-to-peer networks" />
+		<app_category id="131" name="File sharing services and tools" />
+		<app_category id="132" name="Media streaming services" />
+		<app_category id="133" name="Email messaging services" />
+		<app_category id="134" name="VoIP services" />
+		<app_category id="135" name="Database tools" />
+		<app_category id="136" name="Online games" />
+		<app_category id="137" name="Management tools and protocols" />
+		<app_category id="138" name="Remote access terminals" />
+		<app_category id="139" name="Tunneling and proxy services" />
+		<app_category id="140" name="Investment platforms" />
+		<app_category id="141" name="Web services" />
+		<app_category id="142" name="Security update tools" />
+		<app_category id="143" name="Web instant messengers" />
+		<app_category id="145" name="Business tools" />
+		<app_category id="146" name="Network protocols" />
+		<app_category id="147" name="Network protocols" />
+		<app_category id="148" name="Network protocols" />
+		<app_category id="151" name="Private protocols" />
+		<app_category id="152" name="Social networks" />
+	</app_categories>
+</data>
