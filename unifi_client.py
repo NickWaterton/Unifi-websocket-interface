@@ -250,7 +250,10 @@ class UnifiClient():
                 self.event_q.task_done()
             self.event_q.put(data['data'])
         elif update_type == "device:update":
-            log.info('received update; %s' % json.dumps(data, indent=2))
+            log.info('received update: %s' % json.dumps(data, indent=2))
+        elif update_type == "speed-test:update":
+            #do something with speed tests here
+            log.info('received speedtest: %s' % json.dumps(data, indent=2))
         else:
             log.warn('Unknown message type: %s, data: %s' % (update_type, json.dumps(data, indent=2)))
             self.message_types.update({update_type:data})
