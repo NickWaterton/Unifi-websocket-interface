@@ -49,6 +49,12 @@ optional arguments:
 
 You have to supply an ip (or FQDN), username and password (your Unifi login credentials), and optionally the port number (default is 8443).
 
+Example command lines:
+- `./unifi_client.py 192.168.x.x username password`
+- `./unifi_client.py 192.168.x.x username password -D` with debugging output so that you can see the data
+- `./unifi_client.py 192.168.x.x username password -po 8444` different default unifi port
+- `./unifi_client.py 192.168.x.x username password -b 192.168.x.y` publish data to your mqtt broker at 192.168.x.y (no mqtt user or password)
+
 `unifi.py` is an example __Python 3__ program using unifi_client.py to update a network status display on an RPi3 (800x600 size). It uses some obscure graphics libraries, so it's not easy to get working, but it's more of an example of how to get and use the data than anything else.
 
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
