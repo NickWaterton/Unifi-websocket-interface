@@ -26,29 +26,22 @@ import json
 import sys
 import time
 import threading
-import queue
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
 from collections import OrderedDict
 
 import logging
 from logging.handlers import RotatingFileHandler
 
-__VERSION__ = '1.0.0'
-
-#import other modules here depending on which websocket you want to use. this is dome in the 
-#routines below for testing, but normally you would do it here.
-'''
-import asyncio
-import aiohttp
-
-import requests
-import websocket
-'''
+__VERSION__ = '1.1.0'
 
 log = logging.getLogger('Main')
 
-class UnifiClient():
+class UnifiClient(object):
 
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False):
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None):
         self.username = username
         self.password = password
         self.host = host
@@ -65,167 +58,31 @@ class UnifiClient():
         self.unifi_data = OrderedDict()
         #keep track of unknown message types
         self.message_types = {}
-        
-        self.python2 = False
-        if sys.version_info[0] < 3:
-            self.python2 = True
+
+        #pass queues to child classes
+        if q is None:
+            self.sync_q = Queue()
+            self.event_q = Queue(10)
+            self.queues = [self.sync_q, self.event_q]
+        else:
+            self.sync_q = q[0]
+            self.event_q = q[1]  
             
         log.debug('Python: %s' % repr(sys.version_info))
         
-        #self.python2 = True    #debugging
-
-        self.sync_q = queue.Queue()
-        self.event_q = queue.Queue(10)
+        self.connect_websocket()
         
-        if self.python2:
-            t = threading.Thread(target=self.connect_websocket)
-        else:
-            t = threading.Thread(target=self.asyncio_websocket)
-            
-        t.daemon = True
-        t.start()
-    
-    def asyncio_websocket(self):
-        '''
-        Python 3 only!
-        '''
-        import asyncio
-        
-        loop = asyncio.new_event_loop()
-        while True:
-            loop.run_until_complete(self.async_websocket())
-            time.sleep(30)
-            log.warn('Reconnecting websocket')
-        
-    async def async_websocket(self):
-        '''
-        By default ClientSession uses strict version of aiohttp.CookieJar. RFC 2109 explicitly forbids cookie accepting from URLs
-        with IP address instead of DNS name (e.g. http://127.0.0.1:80/cookie).
-        It’s good but sometimes for testing we need to enable support for such cookies. It should be done by passing unsafe=True
-        to aiohttp.CookieJar constructor:
-        '''
-        import asyncio
-        import aiohttp
-        
-        #enable support for unsafe cookies
-        jar = aiohttp.CookieJar(unsafe=True)
-        
-        log.info('login() %s as %s' % (self.url,self.username))
-
-        json_request = {    'username': self.username,
-                            'password': self.password,
-                            'strict': True
-                       }
-                       
-        try:
-
-            async with aiohttp.ClientSession(cookie_jar=jar) as session:
-                async with session.post(
-                        self.login_url,json=json_request, ssl=self.ssl_verify) as response:
-                        assert response.status == 200
-                        json_response = await response.json()
-                        log.debug('Received json response to login:')
-                        log.debug(json.dumps(json_response, indent=2))
-
-                async with session.get(
-                        self.initial_info_url,json=self.params, ssl=self.ssl_verify) as response:
-                        assert response.status == 200
-                        json_response = await response.json()
-                        log.debug('Received json response to initial data:')
-                        log.debug(json.dumps(json_response, indent=2))
-                        self.update_unifi_data(json_response)
-
-                async with session.ws_connect(self.ws_url, ssl=self.ssl_verify) as ws:
-                    async for msg in ws:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            log.debug('received: %s' % json.dumps(json.loads(msg.data),indent=2))
-                            self.update_unifi_data(msg.json(loads=json.loads))
-                        elif msg.type == aiohttp.WSMsgType.CLOSED:
-                            log.info('WS closed')
-                            break
-                        elif msg.type == aiohttp.WSMsgType.ERROR:
-                            log.error('WS closed with Error')
-                            break
-                            
-        except AssertionError as e:
-            log.error('failed to connect: %s' % e)
-               
-        log.info('Exited')
-    
     def connect_websocket(self):
-        while True:
-            self.simple_websocket()
-            time.sleep(30)
-            log.warn('Reconnecting websocket')
-
-    def simple_websocket(self):
-        import requests
-        import websocket
+        '''
+        connect python 2 or 3 websocket
+        Would need to be fixed for python 4.x...
+        '''
+        if sys.version_info[0] == 3 and sys.version_info[1] > 3:
+            from unifi_client_3 import UnifiClient3 #has to be in separate module to prevent python2 syntax errors
+            UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues)
+        else:
+            UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues)
         
-        log.info('login() %s as %s' % (self.url,self.username))
-        
-        json_request = {    'username': self.username,
-                            'password': self.password,
-                            'strict': True
-                       }    
-        
-        if self.ssl_verify is False:
-            # Disable insecure warnings - our server doesn't have root certs
-            from requests.packages.urllib3.exceptions import InsecureRequestWarning
-            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-        
-        session = requests.Session()# This session is used to login and obtain a session ID
-        session.verify = self.ssl_verify # not really needed as we disable checking in the post anyway
-        
-        try:
-        
-            # We Authenticate with one session to get a session ID and other validation cookies
-            r = session.post(self.login_url, json=json_request, verify=self.ssl_verify)
-            assert r.status_code == 200
-
-            r = session.get(self.initial_info_url, json=self.params, verify=self.ssl_verify)
-            assert r.status_code == 200
-
-            data = r.json()
-            
-            log.debug('received initial data: %s' % json.dumps(data, indent=2))
-            self.update_unifi_data(data)
-            
-            #login successful, get cookies
-            cookies = requests.utils.dict_from_cookiejar(session.cookies)
-            log.debug('cookies: %s' % cookies)
-            #cookies example: {'csrf_token': 'icIkv3tcVjwlJ4TQbgyeCuEZiJGErAUy', 'unifises': 'nutupuMKrLC4eA6CRmS6yWcldWowJRT2'
-            csrf_token = cookies['csrf_token']
-            SESSIONID = cookies['unifises']
-            ws_cookies = "unifises=%s; csrf_token=%s" % (SESSIONID, csrf_token)
-            
-            #optional debugging on
-            if log.getEffectiveLevel() == logging.DEBUG:
-                websocket.enableTrace(True)
-            import ssl  #so that we can disable checking
-            # Disable insecure warnings - our server doesn't have root certs
-            if self.ssl_verify:
-                ws = websocket.WebSocket()
-            else:
-                ws = websocket.WebSocket(sslopt={"cert_reqs": ssl.CERT_NONE})
-            ws.connect(   self.ws_url,
-                          cookie = ws_cookies
-                      )
-                      
-            while True:
-                msg=ws.recv()
-                if len(msg) == 0:
-                    log.info('WS closed')
-                    break
-                log.debug('received: %s' % json.dumps(json.loads(msg), indent=2))
-                self.update_unifi_data(json.loads(msg))
-            log.info('WS disconnected')
-
-        except AssertionError as e:
-            log.error("Connection failed error: %s" % e)
-               
-        log.info('Exited')
-            
     def update_unifi_data(self, data):
         '''
         takes data from the websocket, splits device sync updates and events out,
@@ -235,51 +92,63 @@ class UnifiClient():
         unifi_data = OrderedDict()
         
         meta = data['meta']
-        update_type = meta.get("message", "device:sync")   #"events" or "device:sync"
+        update_type = meta.get("message", "device:sync")   #"events", "device:sync", "device:update", "speed-test:update", possibly others
+        data_list = data['data']
+        
         if update_type == "device:sync":
-            data_list = data['data']
             for update in data_list:
                 new_data={update["_id"]:update}
                 unifi_data.update(new_data)
                 log.info('Updating: %s (%s)' % (update["_id"], unifi_data[update["_id"]].get("name",'Unknown')))
             self.sync_q.put(unifi_data)
+            
         elif update_type == "events":
             if self.event_q.full():
                 #discard oldest event
                 self.event_q.get()
                 self.event_q.task_done()
             self.event_q.put(data['data'])
+            
         elif update_type == "device:update":
             log.info('received update: %s' % json.dumps(data, indent=2))
+            #do something with updates here
         elif update_type == "speed-test:update":
-            #do something with speed tests here
             log.info('received speedtest: %s' % json.dumps(data, indent=2))
+            #do something with speed tests here
         else:
             log.warn('Unknown message type: %s, data: %s' % (update_type, json.dumps(data, indent=2)))
             self.message_types.update({update_type:data})
      
         if len(self.message_types) > 0:
-            log.warn('unknown message types: %s' % self.message_types.keys())
+            log.warn('previously received unknown message types: %s' % self.message_types.keys())
             
         log.debug('%d events in event queue%s' % (self.event_q.qsize(),'' if not self.event_q.full() else ' event queue is FULL' ))
+        log.debug('%d events in sync queue' % (self.sync_q.qsize()))
             
         if log.getEffectiveLevel() == logging.DEBUG:    
             with open('raw_data.json', 'w') as f:
                 f.write(json.dumps(unifi_data, indent=2))
             
     def deduplicate_list(self, base_list):
+        '''
+        takes list of dicts, and returns list of deduplicated dicts
+        based on _id value
+        '''
         temp=OrderedDict()
         for d in base_list:
             temp[d['_id']] = d
         return list(temp.values())
         
     def update_list(self, base_list, update_list):
+        '''
+        operates on list of dicts, updates base_list with new values from update_list
+        '''
         try:
             #eliminate earlier duplicates
             base_list = self.deduplicate_list(base_list)
             update_list = self.deduplicate_list(update_list)
             for item in update_list:
-                for id, device in enumerate(base_list.copy()):
+                for id, device in enumerate(list(base_list)):   #copy list so that we can change it while iterating on it
                     if device['_id'] == item['_id']:
                         base_list.remove(device)
                         base_list.insert(id,item)
@@ -354,7 +223,93 @@ class UnifiClient():
                     devices_list.append(device)
             devices_dict[type] = devices_list
         return devices_dict
+
+class UnifiClient2(UnifiClient):
+    '''
+    Python 2 websocket class
+    '''
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None):
+        super(UnifiClient2, self).__init__(username, password, host, port, ssl_verify, q)
+   
+    def connect_websocket(self):
+        t=threading.Thread(target=self.start_websocket)
+        t.daemon = True
+        t.start()
+   
+    def start_websocket(self):
+        log.debug('Python 2 websocket')
+        while True:
+            self.simple_websocket()
+            time.sleep(30)
+            log.warn('Reconnecting websocket')
+
+    def simple_websocket(self):
+        import requests
+        import websocket
         
+        log.info('login() %s as %s' % (self.url,self.username))
+        
+        json_request = {    'username': self.username,
+                            'password': self.password,
+                            'strict': True
+                       }    
+        
+        if self.ssl_verify is False:
+            # Disable insecure warnings - our server doesn't have root certs
+            from requests.packages.urllib3.exceptions import InsecureRequestWarning
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+        
+        session = requests.Session()# This session is used to login and obtain a session ID
+        session.verify = self.ssl_verify # not really needed as we disable checking in the post anyway
+        
+        try:
+        
+            # We Authenticate with one session to get a session ID and other validation cookies
+            r = session.post(self.login_url, json=json_request, verify=self.ssl_verify)
+            assert r.status_code == 200
+
+            r = session.get(self.initial_info_url, json=self.params, verify=self.ssl_verify)
+            assert r.status_code == 200
+
+            data = r.json()
+            
+            log.debug('received initial data: %s' % json.dumps(data, indent=2))
+            self.update_unifi_data(data)
+            
+            #login successful, get cookies
+            cookies = requests.utils.dict_from_cookiejar(session.cookies)
+            log.debug('cookies: %s' % cookies)
+            #cookies example: {'csrf_token': 'icIkv3tcVjwlJ4TQbgyeCuEZiJGErAUy', 'unifises': 'nutupuMKrLC4eA6CRmS6yWcldWowJRT2'
+            csrf_token = cookies['csrf_token']
+            SESSIONID = cookies['unifises']
+            ws_cookies = "unifises=%s; csrf_token=%s" % (SESSIONID, csrf_token)
+            
+            #optional debugging on
+            if log.getEffectiveLevel() == logging.DEBUG:
+                websocket.enableTrace(True)
+            import ssl  #so that we can disable checking
+            # Disable insecure warnings - our server doesn't have root certs
+            if self.ssl_verify:
+                ws = websocket.WebSocket()
+            else:
+                ws = websocket.WebSocket(sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws.connect(   self.ws_url,
+                          cookie = ws_cookies
+                      )
+                      
+            while True:
+                msg=ws.recv()
+                if len(msg) == 0:
+                    log.info('WS closed')
+                    break
+                log.debug('received: %s' % json.dumps(json.loads(msg), indent=2))
+                self.update_unifi_data(json.loads(msg))
+            log.info('WS disconnected')
+
+        except AssertionError as e:
+            log.error("Connection failed error: %s" % e)
+               
+        log.info('Exited')
         
 def setup_logger(logger_name, log_file, level=logging.DEBUG, console=False):
     try: 
@@ -436,7 +391,7 @@ def main():
    
     
         client = UnifiClient(arg.username, arg.password, arg.IP, arg.unifi_port, arg.ssl_verify)
-    
+
         while True:
             data = client.devices()
             log.info('got new data')

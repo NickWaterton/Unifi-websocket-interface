@@ -1,16 +1,17 @@
 # Unifi-websocket-interface
 A Websocket client for Unifi Controller and an example RPi based display program.
 
-The websocket client is `unifi_client.py` or `unify_client_2.py`
+The websocket client is `unifi_client.py`
 
 You can run it from the command line as an example, but mostly you would import it as a module.
 
-`unify_client.py` is designed for python 3, tested under python 3.5.
+`unify_client.py` is designed for python 3.4 and above, tested under python 3.5, but includes support for python 2.
 It uses asyncio-http so you need to install `aiohttp` for python 3.x. You also need `asyncio` support.
+`unifi_client_3.py` is the python 3 websocket client class, so it needs to be in the same directory as `unifi_client.py`
 
-`unifi_client_2.py` is for Python 2 it uses `requests` and `websocket-client`, so you need to have both installed.
+The Python 2 websocket uses `requests` and `websocket-client`, so you need to have both installed if you are using python 2.
 
-`unifi_client.py` and `unifi_client_2.py` can also optionally publish data to an mqtt topic, for which you need `paho-mqtt` installed.
+`unifi_client.py` can also optionally publish data to an mqtt topic, for which you need `paho-mqtt` installed.
 
 here is the help text:
 
@@ -48,7 +49,7 @@ optional arguments:
 
 You have to supply an ip (or FQDN), username and password (your Unifi login credentials), and optionally the port number (default is 8443).
 
-`unifi.py` is an example program using unifi_client.py to update a network status display on an RPi3 (800x600 size). It uses some obscure graphics libraries, so it's not easy to get working, but it's more of an example of how to get and use the data than anything else.
+`unifi.py` is an example __Python 3__ program using unifi_client.py to update a network status display on an RPi3 (800x600 size). It uses some obscure graphics libraries, so it's not easy to get working, but it's more of an example of how to get and use the data than anything else.
 
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
 
