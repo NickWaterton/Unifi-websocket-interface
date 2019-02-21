@@ -59,6 +59,7 @@ Example command lines:
 
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
 
+When the client first connects, it pulls the confguration data for __all__ your devices, so the first data hit is large, after that only updates are received from the controller. The data is in the same format as it is received, ie a list of dictionaries (received as json text). The current state is stored in the client in `UnifiClient.unifi_data`, which is only updated when you call `UnifiClient.devices()`. There are methods for accessing this data, all of which call the devices() method internally, so use the methods, rather than accessing unifi_data directly. Only device;sync and events methos are exposed, other types of update (speed test and so on) are displayed in debug mode, but otherwise ignored. It would be easy to add handling for these updates though if you need them for something. feel free to fork your own version.
 
 All is tested on Unifi 5.10.17, with FW 4.0.21. I have various AP's (UAP-AC-XX) some Unifi Switches and a USG (3 port).
 
