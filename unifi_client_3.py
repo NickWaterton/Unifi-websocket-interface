@@ -29,10 +29,6 @@ from queue import Queue
 from collections import OrderedDict
 
 import logging
-from logging.handlers import RotatingFileHandler
-
-#import other modules here depending on which websocket you want to use. this is dome in the 
-#routines below for testing, but normally you would do it here.
 
 log = logging.getLogger('Main')
 
