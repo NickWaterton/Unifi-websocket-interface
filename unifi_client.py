@@ -92,7 +92,7 @@ class UnifiClient(object):
         unifi_data = OrderedDict()
         
         meta = data['meta']
-        update_type = meta.get("message", "device:sync")   #"events", "device:sync", "device:update", "speed-test:update", possibly others
+        update_type = meta.get("message", "device:sync")   #"events", "device:sync", "device:update", "speed-test:update", "user:sync", possibly others
         data_list = data['data']
         
         if update_type == "device:sync":
@@ -112,9 +112,13 @@ class UnifiClient(object):
         elif update_type == "device:update":
             log.info('received update: %s' % json.dumps(data, indent=2))
             #do something with updates here
+        elif update_type == "user:sync":
+            log.info('received sync: %s' % json.dumps(data, indent=2))
+            #do something with user syncs here
         elif update_type == "speed-test:update":
             log.info('received speedtest: %s' % json.dumps(data, indent=2))
             #do something with speed tests here
+            
         else:
             log.warn('Unknown message type: %s, data: %s' % (update_type, json.dumps(data, indent=2)))
             self.message_types.update({update_type:data})

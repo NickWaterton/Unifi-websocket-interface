@@ -18,7 +18,9 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-__VERSION__ = '1.0.0'
+# N Waterton V 1.0.1 13th March 2019 - Major re-write to allow different screen resolutions.
+
+__VERSION__ = '1.1.0'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -32,6 +34,7 @@ import sys, os
 from multiprocessing import Process, Value, Queue
 from subprocess import check_output
 from collections import OrderedDict
+import configparser
 
 #from controller import Controller
 from unifi_client import UnifiClient
@@ -41,7 +44,7 @@ from logging.handlers import RotatingFileHandler
         
 class UnifiApp(Grx.Application):
     """Base class for simple (non-interactive) demo apps"""
-    def __init__(self):
+    def __init__(self, arg):
         super(Grx.Application, self).__init__()
         self.init()
         self.hold()
@@ -58,10 +61,13 @@ class UnifiApp(Grx.Application):
         blue = colors[Grx.EgaColorIndex.BLUE]
         magenta = colors[Grx.EgaColorIndex.MAGENTA]
         red = colors[Grx.EgaColorIndex.RED]
-        dark_gray = colors[Grx.EgaColorIndex.DARK_GRAY]
-        self.set_default_text_size(14)
+        dark_gray = Grx.color_get(47,79,79)#colors[Grx.EgaColorIndex.DARK_GRAY]
+        self.set_default_text_size(arg.font_size)
+        
+        self.arg = arg
         
         self.port_size=0
+        self.min_port_size = self.port_size
 
         self.draw_devices = []
         self.redraw_all = False #causes redraw after creation if set to True
@@ -117,7 +123,9 @@ class UnifiApp(Grx.Application):
             y = event.button.y
         else:
             return False
-            
+         
+        log.info('location x: %s, y: %s' % (x,y))
+         
         draw_devices = False
         
         if self.zoomed:
@@ -135,22 +143,27 @@ class UnifiApp(Grx.Application):
         if not draw_devices:
             for devices in self.all_devices:
                 for id, device in devices.items():
+                    log.debug('checking device: %s, device_x: %s, right: %s, y:%s, bottom;%s' % (device.name, device.x,device.device_right,device.y,device.device_bottom)) 
                     if x >= device.x and x <= device.device_right and y >= device.y and y <= device.device_bottom:
                         log.info('touched device: %s' % device.name)
                         self.draw_devices =[id]
                         devices.pop(id) #force recreation of device with new size parameters
                         if device.type == 'usw':
-                            self.port_size=55
+                            self.port_size=Grx.get_height()//8#55
                             self.text_lines['usw'] = 2
                         elif device.type == 'ugw':
-                            self.port_size=140
+                            self.port_size=Grx.get_height()//4#140
                             self.text_lines['ugw'] = 8
                             self.x_pos = None
                         else:   #uap
-                            self.port_size=140
+                            self.port_size=Grx.get_height()//4#140
                             self.text_lines['uap'] = 7
                             self.x_pos = None
-                        self.y_update_pos = 460 #where the key etc is displayed (y pos)
+                        if self.update_height:
+                            self.y_update_pos = Grx.get_height()-self.update_height - 10 #(10 margin)
+                        else:
+                            self.y_update_pos = 460 #where the key etc is displayed (y pos)
+                        log.info('Update Position set to: %s, update_height: %s' % (self.y_update_pos,self.update_height))
                         self.zoomed = True
                         draw_devices = True
                         break
@@ -205,13 +218,19 @@ class UnifiApp(Grx.Application):
                                     'uap':3
                                   }
         self.text_lines = self.default_text_lines.copy()
-        self.default_update_position = 330 #where the key etc is displayed (y pos)
-        self.default_left_margin = 10   #not used for switches, switches always display 10 in from the right
+        self.default_update_position = None  #where the key etc is displayed (y pos) - initially None (no display) until USG is drawn, so we can position it below the USG
+        self.key_height = None               #Key height - gets figured out when key is drawn
+        self.key_spacing = 5                 #y spacing between key boxes
+        self.update_height = None            #height of update display - gets figured out when it's displayed
+        self.default_left_margin = 10        #not used for switches, switches always display 10 in from the right
         self.default_top_margin = 10
         
         self.network_switches = {}
         self.usg = {}
         self.uap = {}
+        
+        self.ap_spacing = None  #horizontal spacing of ap's
+        self.ap_extra_text=0    #extra text lines to fit in Ap's if possible (gets updated later)
         
         self.all_devices = [self.network_switches, self.usg, self.uap]
         
@@ -237,6 +256,10 @@ class UnifiApp(Grx.Application):
         self.redraw_key = True
         self.zoomed = False
         
+        self.custom = None
+        if self.arg.custom:
+            self.load_config(self.arg.custom)
+        
         #multiprocess stuff
         self.exit = Value('i', 0)   #False
         self.q = Queue()
@@ -249,12 +272,65 @@ class UnifiApp(Grx.Application):
         GLib.timeout_add_seconds(1,self.draw_all_devices)
         #GLib.idle_add(self.draw_all_devices)
         
+    def load_config(self, file):
+        '''
+        loads custom config file
+        '''
+        self.custom = {}
+        config = configparser.ConfigParser(delimiters=('=', '('), interpolation=configparser.ExtendedInterpolation())
+        config.read(file)
+        
+        #spacing of AP's (included to disable auto sizing and spacing)
+        self.ap_spacing = 0
+        self.custom_working = {}
+        
+        if 'default' in config:
+            default = config['default']
+            font_size = default.getint('font_size',self.arg.font_size)
+            self.set_default_text_size(font_size)
+            self.text_height = text_height
+            self.text_width = text_width
+            self.default_text_opt = default_text_opt
+            #key display default location
+            self.x_update_pos = default.getint('x_update_pos',self.x_update_pos)
+            self.y_update_pos = default.getint('y_update_pos',self.default_update_position)
+            self.default_update_position = self.y_update_pos
+
+        if 'ugw' in config:
+            ugw = config['ugw']
+            self.custom['ugw'] = {}
+            for usg, value in ugw.items():
+                if '=' in value:
+                    value = value.split('=')[1].strip()
+                self.custom['ugw'][usg] = eval(value)
+                log.info('UGW custom: %s=%s' % (usg,value))
+                
+        if 'usw' in config:
+            usw = config['usw']
+            self.custom['usw'] = {}
+            for switch, value in usw.items():
+                if '=' in value:
+                    value = value.split('=')[1].strip()
+                self.custom['usw'][switch] = eval(value)
+                log.info('USW custom: %s=%s' % (switch,value))
+                
+        if 'uap' in config:
+            uap = config['uap']
+            self.custom['uap'] = {}
+            for uap, value in uap.items():
+                if '=' in value:
+                    value = value.split('=')[1].strip()
+                self.custom['uap'][uap] = eval(value)
+                log.info('UAP custom: %s=%s' % (uap,value))
+                
+        
     def draw_key(self, x=30, y=182):
         #x = 30
         #y = 182
-        box_size = 20
-        spacing = 5
-        key = OrderedDict( [('= 2000 MBps', {'shape': 'square', 'color':self.magenta}),
+        initial_y = y
+        box_size = self.text_height #20
+        spacing = self.key_spacing
+        key = OrderedDict( [('>= 2000 MBps', {'shape': 'square', 'color':self.magenta}),
                             ('= 1000 MBps', {'shape': 'square', 'color':self.green}),
                             ('= 100 MBps', {'shape': 'square', 'color':self.yellow}),
                             ('= 10 MBps', {'shape': 'square', 'color':self.cyan}),
@@ -263,30 +339,45 @@ class UnifiApp(Grx.Application):
         
         x+=spacing*2
         for text, color in key.items():
-            y+= box_size + spacing
+            #y+= box_size + spacing
             Grx.draw_filled_rounded_box(x, y, x+box_size, y+box_size, 3, color['color'])
             if color['shape'] == 'circle':
                 Grx.draw_filled_circle(x+box_size//2, y+box_size//2, box_size//4, self.blue)
             Grx.draw_text(text, x+30, y, self.default_text_opt)
+            y+= box_size + spacing
             
         self.redraw_key = False
+        
+        return y - spacing - initial_y    #key height
     
     def draw_update(self):
         if self.exit.value:
             return False
+
+        if self.y_update_pos is None:
+            return GLib.SOURCE_CONTINUE
+            
         x = self.x_update_pos
         y = self.y_update_pos
-        min_pos = y-130
+            
+        update_offset = 3   #spacing from item above
+        key_top_offset = self.text_height+update_offset
+        #draw last update time text
+        Grx.draw_text(self.last_update_text[:19], max(0,x-10), y+update_offset, self.default_text_opt)
         
         if self.redraw_key:
-            self.draw_key(x+15, y-143)
+            self.key_height = self.draw_key(x+15, y+key_top_offset+update_offset)
+        
+        min_pos = y + key_top_offset    #top of bar graph
+        y = min_pos + self.key_height+update_offset   #bottom of bar graph
         
         line_opts = Grx.LineOptions()
-        line_opts.width = 5
-        offset = 10
-        height = 15
+        line_opts.width = self.text_width
+        offset = self.key_spacing   #between bars
+        height = self.text_height   #of bar
         
-        if y-((offset+height)*self.update.value) <= min_pos:
+        #blank bar if it gets to min_pos
+        if y-((offset+height)*self.update.value) < min_pos-update_offset:
             line_opts.color = self.black
             Grx.draw_line_with_options(x,y,x,min_pos,line_opts)
             self.update.value = 1
@@ -302,6 +393,7 @@ class UnifiApp(Grx.Application):
         start = y
         end = y-height
         
+        #draw bar
         for seg in range(self.update.value):
             Grx.draw_line_with_options(x,start,x,end,line_opts)
             start= end-offset
@@ -310,10 +402,9 @@ class UnifiApp(Grx.Application):
                 end = min_pos
 
         self.blink = not self.blink
+        self.update_height = y-self.y_update_pos
         
-        Grx.draw_text(self.last_update_text, max(0,x-10), y-140, self.default_text_opt)
-        
-        return True
+        return GLib.SOURCE_CONTINUE
 
     def get_unifi_data(self):
         client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify)
@@ -357,7 +448,48 @@ class UnifiApp(Grx.Application):
             log.debug('Total Number of Devices: %d' % len(base_list))
         except Exception as e:
             log.info('ERROR: %s' % e)
-        return base_list         
+        return base_list
+
+    def initialise_custom_dicts(self, name, devices):
+        if not self.custom_working.get(name):
+            self.custom_working[name] = {}
+            try:
+                for key in self.custom[name].copy().keys():
+                    for device in devices:
+                        device_id = device["device_id"]
+                        if key == device_id:
+                            self.custom_working[name][device_id] = self.custom[name].pop(device_id)
+                            log.info('Custom config device_id: %s (%s) found in %s' % (device_id, device["name"], name))
+            except KeyError as e:
+                log.error('Key Error: %s' % e) 
+                del self.custom_working[name]
+                return
+                
+            if len(self.custom[name]) > 0:
+                for device in devices:
+                    device_id = device["device_id"]
+                    if device_id in self.custom_working[name]:
+                        continue
+                    try:
+                        key = next(iter(self.custom[name]))
+                        value = self.custom[name].pop(key, None)
+                        if value is not None:
+                            log.info('Custom config %s assigned to device_id: %s(%s)' % (key, device_id, device["name"]))
+                            self.custom_working[name][device_id] = value
+                    except StopIteration:
+                        break
+                      
+    def draw_custom_device(self, name, devices, type):
+        if self.custom.get(name):
+            self.initialise_custom_dicts(name, devices)
+        if self.custom_working.get(name):
+            for custom_device_id, param in self.custom_working[name].items():
+                for device in devices:
+                    device_id = device["device_id"]
+                    if custom_device_id == device_id:
+                        log.info('%s(%s), x: %s, y: %s port_size: %s, text_lines: %s' % (device["name"], device_id, param[0], param[1], param[2], param[3]))
+                        self.text_lines[name] = param[3]
+                        self.create_devices(param[0], param[1], type, [device], param[2])
         
     def draw_all_devices(self, override=False):
         if not override:
@@ -380,15 +512,28 @@ class UnifiApp(Grx.Application):
             elif device["type"]=='ugw':
                 usgs.append(device)
             elif device["type"]=='uap':
-                uaps.append(device)
-                      
-        last_switch_pos = self.create_devices(-10, self.default_top_margin, self.network_switches, switches) #auto 10 in from the right, 10 down
-        self.create_devices(self.x_pos, self.default_top_margin, self.usg, usgs)
-        if self.x_pos is not None:
-            x_pos = self.x_pos - 4 #normally 6 from left side
+                if len(uaps) < 9:           #for debugging
+                    uaps.append(device)
+                    
+        log.info('number of usgs: %s, switches: %s, aps: %s' % (len(usgs),len(switches),len(uaps)))
+        
+        if self.custom and not self.zoomed:
+            #draw custom devices
+            self.draw_custom_device('ugw', usgs, self.usg)
+            self.draw_custom_device('usw', switches, self.network_switches)
+            self.draw_custom_device('uap', uaps, self.uap)
         else:
-            x_pos = self.x_pos
-        self.create_devices(x_pos, last_switch_pos+5, self.uap, uaps)
+            #auto layout/zoomed layout
+            last_switch_pos = self.create_devices(-10, self.default_top_margin, self.network_switches, switches) #auto 10 in from the right, 10 down
+            last_usg_position = self.create_devices(self.x_pos, self.default_top_margin, self.usg, usgs)
+            if self.default_update_position is None:  #set initial key position below USG
+                self.default_update_position = last_usg_position - self.text_height//2
+                self.set_default_positions()
+            if self.x_pos is not None:
+                x_pos = self.x_pos - 4 #normally 6 from left side
+            else:
+                x_pos = self.x_pos
+            self.create_devices(x_pos, last_switch_pos+5, self.uap, uaps)
         
         self.update_device(self.network_switches, switches)
         self.update_device(self.usg, usgs)
@@ -401,11 +546,24 @@ class UnifiApp(Grx.Application):
             
         return GLib.SOURCE_CONTINUE
         
-    def create_devices(self, x, y, devices, data):
-        last_switch_pos = y
+    def create_devices(self, x, y, devices, data, port_size=None):
+        last_y_pos = y
+        last_ap_x_pos = None
+        org_x = x
+        org_y = y
+        device_height = ap_ports = ap_single_ports = ap_margin = 0
+        if not port_size:
+            port_size=self.port_size
+        max_right = Grx.get_width()
+        spacing = self.ap_spacing
+        if spacing is None:
+            spacing = self.text_width//2
+        log.info('Drawing Devices with horizontal spacing of: %s, max_right: %s' % (spacing, max_right))
         if len(data) > 0:
+            count = -1
             #create devices
             for device in data:
+                count +=1
                 id = device["device_id"]
                 name = device["name"]
                 model = device["model"]
@@ -427,21 +585,92 @@ class UnifiApp(Grx.Application):
                         ports+=port.get("num_port",0)
                     if type == 'usw':
                         log.info('creating switch: %s' % name)
-                        devices[id]=(NetworkSwitch(x,y, ports, device, model=model, port_size=self.port_size, text_lines=self.text_lines[type]))
+                        devices[id]=(NetworkSwitch(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]))
                         #Vertical spacing of switches increment next switch this many down
-                        last_switch_pos = y = devices[id].device_bottom + 10
+                        last_y_pos = y = devices[id].device_bottom + self.text_height//2
                     elif type == 'ugw':
                         log.info('creating usg: %s' % name)
-                        devices[id]=(USG(x,y, ports, device, model=model, port_size=self.port_size, text_lines=self.text_lines[type]))
+                        devices[id]=(USG(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]))
                         #Vertical spacing of usg's increment next switch this many down (of course should only be one...)
-                        y = devices[id].device_bottom + 10
+                        last_y_pos = y = devices[id].device_bottom + self.text_height//2
+                        log.info('USG right: %s' % devices[id].device_right)
                     elif type == 'uap':
-                        log.info('creating uap: %s' % name)
-                        devices[id]=(UAP(x,y, ports, device, model=model, port_size=self.port_size, text_lines=self.text_lines[type]))
+                        #first run is always a dry run
+                        extra_text = self.ap_extra_text
+                        port_size = max(port_size,self.min_port_size)
+                        log.info('creating uap: %s at x: %s, spacing: %s port_size: %s, extra_text: %s' % (name, x, spacing, port_size, extra_text))
+                        devices[id]=(UAP(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]+extra_text, dry_run=self.ap_spacing is None))
+                        new_port_size=devices[id].port_height
+                        ap_ports+=devices[id].num_ports
+                        device_height=devices[id].device_height
+                        if devices[id].num_ports == 1:
+                            ap_single_ports+=1
+                        device_bottom=devices[id].device_bottom
+                        log.debug('AP info: device_right: %s, x: %s, num_ports: %s, port_width: %s, spacing: %s' % (devices[id].device_right,x,devices[id].num_ports,devices[id].port_width,spacing))
+                        if x is not None:
+                            ap_margin+=(devices[id].device_right-x)-(devices[id].num_ports*devices[id].port_width)+spacing
                         #horizontal spacing of AP's
-                        x = devices[id].device_right + 2
+                        last_ap_x_pos = devices[id].device_right
+                        x = devices[id].device_right + spacing
+                        #if dry run, don't save device
+                        if self.ap_spacing is None:
+                            devices.pop(id, None)
+                            self.device_locations.pop(id, None)
+                        log.info('AP Drawn at end x: %s, max pos: %s, port-size: %s, device_bottom: %s, max: %s' % (last_ap_x_pos, max_right, new_port_size, device_bottom, Grx.get_height()))
+               
+        if self.ap_spacing is None and last_ap_x_pos is not None:
+            #just created Ap's dry run, so calculate spacing evenly across display
+            #fit extra text in if we have space.
+            #set ap_spacing in custom config to skip these sections
+            
+            #find new port size that fits available space
+            if self.min_port_size == 0:
+                ap_margin-=spacing
+                right_target = new_port_size+(max_right-last_ap_x_pos)//ap_ports
+                if right_target > 100 and ap_single_ports > 0:
+                    #if we only have 1 large port overall width is increased by port_width//2 (on either side)
+                    last_ap_x_pos = org_x+ ap_margin + ((right_target)*ap_single_ports + right_target*ap_ports)
+                    while last_ap_x_pos > max_right:
+                        right_target-=1
+                        last_ap_x_pos = org_x+ ap_margin + (right_target*ap_ports)
+                        if right_target > 100:
+                            last_ap_x_pos += right_target*ap_single_ports
+
+                bottom_target = new_port_size+(Grx.get_height()-device_bottom)-self.text_height//2
+                self.min_port_size = min(bottom_target,right_target)
+                
+                self.ap_extra_text = extra_text
+                #if we have room for extra text
+                if bottom_target > right_target and self.arg.extra_text:
+                    self.ap_extra_text = (bottom_target - right_target)//self.text_height
                     
-        return last_switch_pos
+                #minimum port size 4 chars!
+                if self.min_port_size < self.text_width*4:
+                    self.text_lines[type] = 1
+                    self.min_port_size = self.text_width*4
+                
+                log.info('Recalculated Port Size: total number of ports: %s, ap_margin: %s, b_target: %s, r_target: %s, new port size: %s' % (ap_ports,ap_margin,bottom_target, right_target,self.min_port_size))
+
+                #second dry run, as now we have to calculate the spacing for the new, resized AP's
+                self.create_devices(org_x, org_y, devices, data, port_size)
+  
+            #calculate spacing of ap's
+            num_aps = len(data)
+            min_spacing = max(0,(last_ap_x_pos - org_x)//(num_aps+1))
+            new_x = max_right//2 - ((last_ap_x_pos - org_x)//2)
+
+            if num_aps < 2:
+                self.ap_spacing = min_spacing
+                org_x=new_x
+            else:
+                self.ap_spacing = min(min_spacing,((max_right - org_x - last_ap_x_pos)//(num_aps-1)) + self.text_width//2)
+                org_x=new_x - ((self.ap_spacing-self.text_width//2)*(num_aps-1)//2)
+            log.info('recalculating spacing - last x pos: %s - recreating APs, new spacing: %s' % (last_ap_x_pos, self.ap_spacing))
+            
+            #actually create devices for real
+            self.create_devices(org_x, org_y, devices, data, port_size)
+            
+        return last_y_pos
         
     def update_device(self, devices, data):
         for id, device in devices.items():
@@ -587,7 +816,7 @@ class NetworkPort():
             return self.yellow
         elif self.speed == 1000:
             return self.green
-        elif self.speed == 2000:
+        elif self.speed >= 2000:
             return self.magenta
         else:
             return self.red
@@ -749,8 +978,10 @@ class NetworkDevice():
         #horizontal offset of sfp ports
         self.sfp_offset = 0
         #port width
-        self.port_width = max(port_size, self.text_width*5) #5 characters wide min for ports
-        self.port_height = max(port_size, self.text_width*5) # square ports
+        if not port_size:
+            port_size = self.text_width*5   #5 characters wide default for ports (will be overridden by auto scaling later, but this is the stating point)
+        self.port_width = port_size
+        self.port_height = port_size
         #port spacing
         self.v_spacing = self.text_height + 2
         self.h_spacing = 3
@@ -800,6 +1031,7 @@ class NetworkDevice():
             self.device_bottom = self.y+self.y_offset-self.text_height//2+(self.port_height+self.v_spacing)*self.rows
             self.device_right = self.x+self.sfp_offset+self.x_offset*2+(self.port_width+self.h_spacing)*(self.num_ports//self.rows)
         self.device_width = self.device_right - self.x
+        self.device_height = self.device_bottom - self.y
         self.box_width = self.device_width//self.text_width
 
         self.ports = {}
@@ -978,17 +1210,21 @@ class NetworkDevice():
         #text
         columns = 1
         text_lines = (Grx.get_height()-offset-self.device_bottom-offset)//self.text_height
+        log.info('lines of text that fit in windows: %s' % text_lines)
         text = self.extra_text()
         
         next_column = False #end line of text in '\n' to trigger new column manually
-
-        for line, txt in enumerate(text, 1):
+        
+        line = 0
+        for txt in text:
+            line +=1
             if line%text_lines == 0 or next_column:
+                line = 0
                 next_column = False
                 text_top+=self.text_height
-                left+= 280
+                left+= self.text_width*40   #40 chars per column
                 columns+=1
-                if columns > 2:
+                if columns > 2: #max 2 columns
                     break
                     
             if txt.endswith('\n'):
@@ -1053,16 +1289,16 @@ class NetworkDevice():
         self.text_override = False
         try:
             if self.poe:
-                text = '%-2d°C Fan:%-3d%% Pwr:%-3d%% Load:%-14s Mem:%-3d%%' % ( self.device_params['temp'], 
+                text = '%-2d°C Fan:%-2d%% Pwr:%-2d%% Load:%-14s Mem:%-2d%%' % ( self.device_params['temp'], 
                                                                                 self.device_params['fan'], 
                                                                                 self.device_params['power'], 
                                                                                 self.device_params['load'], 
                                                                                 self.device_params['mem'])
             else:
-                text='%-2d°C Fan:%-3d%% Load:%-14s Mem:%-3d%%' % ( self.device_params['temp'], 
-                                                                   self.device_params['fan'], 
-                                                                   self.device_params['load'], 
-                                                                   self.device_params['mem'])
+                text = '%-2d°C Fan:%-2d%% Load:%-14s Mem:%-2d%%' % ( self.device_params['temp'], 
+                                                                     self.device_params['fan'], 
+                                                                     self.device_params['load'], 
+                                                                     self.device_params['mem'])
             uptime = 'UP:%-16s' % self.device_params['uptime_text']
             text+= '%*s%s' % (self.box_width-len(text)-len(uptime)-1,'',uptime)
             self.text = [text, 'IP: %s.  MAC: %s, FW_VER: %s Available: %s' % (self.ip,self.device_params['mac'],self.device_params['fw_ver'], self.device_params['upgrade'])]
@@ -1087,7 +1323,7 @@ class NetworkDevice():
             if txt != self.previous_settings.get(line,None):
                 #log.info('%s: drawing line: %d, %s' % (self.name, line, txt))
                 Grx.draw_filled_box(self.x+self.text_offset, text_top, self.x+self.device_width-2, text_top+self.text_height, self.bg_color) #2 is the border line width
-                Grx.draw_text(txt[:self.box_width], self.x+self.text_offset, text_top, device_text_opts)
+                Grx.draw_text(txt[:self.box_width-1], self.x+self.text_offset, text_top, device_text_opts)
                 self.previous_settings[line] = txt
             
         self.clean = True
@@ -1499,17 +1735,21 @@ class UAP(NetworkDevice):
              
     type='uap'  #AP type
 
-    def __init__(self, x, y, ports=2, data=None, model=None, port_size=0, text_lines=3):  
+    def __init__(self, x, y, ports=2, data=None, model=None, port_size=0, text_lines=3, dry_run=False):  
         log.info('AP: %s, ports = %d' % (model,ports))
         
-        self.init(x, y, data, model, ports, False, False, port_size, 8, 14, text_lines)
+        x_offset = 8
+        if ports == 1:  #make single port AP's a bit wider (so we can fit more text in)
+            x_offset = 16
+        self.init(x, y, data, model, ports, False, False, port_size, x_offset, 14, text_lines)
  
         #distance from outline to text
         self.text_offset = 5
         #of rows of ports
         self.init_rows(1)
-        self.update_from_data()
-        self.draw_device()
+        if not dry_run:
+            self.update_from_data()
+            self.draw_device()
         
     def set_text(self, text=None): 
         #override this with each devices metrics text
@@ -1603,10 +1843,12 @@ def main():
     parser.add_argument('username', action="store", default=None, help='Unifi username. (default=None)')
     parser.add_argument('password', action="store", default=None, help='unifi password. (default=None)')
     parser.add_argument('-s','--ssl_verify', action='store_true', help='Verify Certificates (Default: False)', default = False)
+    parser.add_argument('-f','--font_size', action="store", type=int, default=10, help='font size - controlls device size (default=10)')
+    parser.add_argument('-t','--extra_text', action='store_true', help='Display Extra text in APs to fill screen (Default false)', default = False)
+    parser.add_argument('-c','--custom', action="store", default=None, help='use custom layout (default=None)')
     parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
     parser.add_argument('-D','--debug', action='store_true', help='debug mode', default = False)
     parser.add_argument('-V','--version', action='version',version='%(prog)s {version}'.format(version=__VERSION__))
-
     
     arg = parser.parse_args()
     
@@ -1630,7 +1872,7 @@ def main():
     
     GLib.set_prgname('unifi.py')
     GLib.set_application_name('Unifi Status Screen')
-    app = UnifiApp()
+    app = UnifiApp(arg)
     app.run()
 
 
