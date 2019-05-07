@@ -56,6 +56,15 @@ Example command lines:
 - `./unifi_client.py 192.168.x.x username password -b 192.168.x.y` publish data to your mqtt broker at 192.168.x.y (no mqtt user or password)
 
 `unifi.py` is an example __Python 3__ program using unifi_client.py to update a network status display on an RPi3 (800x600 size). It uses some obscure graphics libraries, so it's not easy to get working, but it's more of an example of how to get and use the data than anything else.
+I did increase the size of the display to 1024x800 later.
+
+To install the required graphics library for `unifi.py` proceed as follows:
+1) Download the keyring file https://github.com/ev3dev/grx/files/2824733/keyring.tar.gz
+2) `sudo cp ev3dev-archive-keyring.gpg /etc/apt/trusted.gpg.d/`
+3) follow the instructions here https://github.com/ev3dev/grx/wiki/Developing-on-Raspberry-Pi ignoring the non-existent keyring link.
+
+__NOTE__ You do not need console-runner, and I never got it to work anyway.
+__NOTE__ Pay attention to the bitmap fonts comment, it is required.
 
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
 
