@@ -66,6 +66,40 @@ To install the required graphics library for `unifi.py` proceed as follows:
 __NOTE__ You do not need console-runner, and I never got it to work anyway.
 __NOTE__ Pay attention to the bitmap fonts comment, it is required.
 
+Here is the help text for unifi.py:
+```
+pi@raspberrypi:~/unifi $ ./unifi.py -h
+usage: unifi.py [-h] [-p PORT] [-s] [-f FONT_SIZE] [-t] [-c CUSTOM] [-l LOG]
+                [-D] [-V]
+                IP username password
+
+Unifi Status Screen
+
+positional arguments:
+  IP                    IP Address of Unifi Controller. (default: None)
+  username              Unifi username. (default=None)
+  password              unifi password. (default=None)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -p PORT, --port PORT  unifi port (default=8443)
+  -s, --ssl_verify      Verify Certificates (Default: False)
+  -f FONT_SIZE, --font_size FONT_SIZE
+                        font size - controlls device size (default=10)
+  -t, --extra_text      Display Extra text in APs to fill screen (Default
+                        false)
+  -c CUSTOM, --custom CUSTOM
+                        use custom layout (default=None)
+  -l LOG, --log LOG     log file. (default=None)
+  -D, --debug           debug mode
+  -V, --version         show program's version number and exit
+```
+
+`custom.ini` allows you to specify the position and size of each item on the display. An example `custom.ini` file is included.
+
+This is what it looks like:
+![Network Monitor](monitor.jpg)
+
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
 
 When the client first connects, it pulls the confguration data for __all__ your devices, so the first data hit is large, after that only updates are received from the controller. The data is in the same format as it is received, ie a list of dictionaries (received as json text). The current state is stored in the client in `UnifiClient.unifi_data`, which is only updated when you call `UnifiClient.devices()`. There are methods for accessing this data, all of which call the devices() method internally, so use the methods, rather than accessing unifi_data directly. Only sync and events methods are exposed, other types of updates (speed test and so on) are displayed in debug mode, but otherwise ignored. It would be easy to add handling for these updates though if you need them for something. Feel free to fork your own version.
