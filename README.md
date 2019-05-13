@@ -1,6 +1,7 @@
 # Unifi-websocket-interface
 A Websocket client for Unifi Controller and an example RPi based display program.
 
+## unifi_client.py
 The websocket client is `unifi_client.py`
 
 You can run it from the command line as an example, but mostly you would import it as a module.
@@ -55,6 +56,7 @@ Example command lines:
 - `./unifi_client.py 192.168.x.x username password -po 8444` different default unifi port
 - `./unifi_client.py 192.168.x.x username password -b 192.168.x.y` publish data to your mqtt broker at 192.168.x.y (no mqtt user or password)
 
+## unifi.py
 `unifi.py` is an example __Python 3__ program using unifi_client.py to update a network status display on an RPi3 (800x600 size). It uses some obscure graphics libraries, so it's not easy to get working, but it's more of an example of how to get and use the data than anything else.
 I did increase the size of the display to 1024x800 later.
 
@@ -64,6 +66,7 @@ To install the required graphics library for `unifi.py` proceed as follows:
 3) follow the instructions here https://github.com/ev3dev/grx/wiki/Developing-on-Raspberry-Pi ignoring the non-existent keyring link.
 
 __NOTE__ You do not need console-runner, and I never got it to work anyway.
+
 __NOTE__ Pay attention to the bitmap fonts comment, it is required.
 
 Here is the help text for unifi.py:
@@ -100,10 +103,12 @@ optional arguments:
 This is what it looks like:
 ![Network Monitor](monitor.jpg)
 
+## controller.py
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
 
 When the client first connects, it pulls the confguration data for __all__ your devices, so the first data hit is large, after that only updates are received from the controller. The data is in the same format as it is received, ie a list of dictionaries (received as json text). The current state is stored in the client in `UnifiClient.unifi_data`, which is only updated when you call `UnifiClient.devices()`. There are methods for accessing this data, all of which call the devices() method internally, so use the methods, rather than accessing unifi_data directly. Only sync and events methods are exposed, other types of updates (speed test and so on) are displayed in debug mode, but otherwise ignored. It would be easy to add handling for these updates though if you need them for something. Feel free to fork your own version.
 
+## Summary
 All is tested on Unifi 5.10.17, with FW 4.0.21. I have various AP's (UAP-AC-XX) some Unifi Switches and a USG (3 port).
 
 Currently running on an RPi3, Python 3.5.3, but also works in my development environment (Ubuntu 18.04.1, Python 3.6.7).
