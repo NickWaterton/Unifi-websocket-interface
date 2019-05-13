@@ -103,6 +103,35 @@ optional arguments:
 This is what it looks like:
 ![Network Monitor](monitor.jpg)
 
+### .bashrc
+Here is an example of `.bashrc modifications` - add to the end of the `.bashrc` file to run `unifi.py` automatically
+
+```
+if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
+  SESSION_TYPE=remote/ssh
+# many other tests omitted
+else
+  case $(ps -o comm= -p $PPID) in
+    sshd|*/sshd) SESSION_TYPE=remote/ssh;;
+  esac
+fi
+
+#export GRX_DRIVER="gw 800 gh 480 dp 300"
+export GRX_DRIVER="gw 1024 gh 600 dp 300"
+
+if [ "$SESSION_TYPE" != "remote/ssh" ]; then
+  cd ~/unifi
+  while :
+  do
+    ./unifi.py 192.168.100.119 <login> <password> -c custom.ini -l unifi.log
+    sleep 5
+  done
+fi
+```
+
+This will automatically start the monitor on boot if the pi is set to auto login to console. the `export GRX_DRIVER=` entry specifies the size of the screen you are using in pixels. if you exit the monitor (say by clicking on the menu), it will automatically start back up again.
+If you log in via SSH, the monitor is not started.
+
 ## controller.py
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
 
