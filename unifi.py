@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +15,9 @@
 #
 
 # N Waterton V 1.0.1 13th March 2019 - Major re-write to allow different screen resolutions.
+# N. Waterton V 1.1.1 14th may 2019 - Added support for SFP+ ports.
 
-__VERSION__ = '1.1.0'
+__VERSION__ = '1.1.1'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -29,7 +31,10 @@ import sys, os
 from multiprocessing import Process, Value, Queue
 from subprocess import check_output
 from collections import OrderedDict
-import configparser
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 
 #from controller import Controller
 from unifi_client import UnifiClient
@@ -56,7 +61,7 @@ class UnifiApp(Grx.Application):
         blue = colors[Grx.EgaColorIndex.BLUE]
         magenta = colors[Grx.EgaColorIndex.MAGENTA]
         red = colors[Grx.EgaColorIndex.RED]
-        dark_gray = Grx.color_get(47,79,79)#colors[Grx.EgaColorIndex.DARK_GRAY]
+        dark_gray = Grx.color_get(47,79,79)#colors[Grx.EgaColorIndex.DARK_GRAY] #this is a slate gray
         self.set_default_text_size(arg.font_size)
         
         self.arg = arg
@@ -217,6 +222,9 @@ class UnifiApp(Grx.Application):
         self.key_height = None               #Key height - gets figured out when key is drawn
         self.key_spacing = 5                 #y spacing between key boxes
         self.update_height = None            #height of update display - gets figured out when it's displayed
+        self.update_text_opt = self.duplicate_text_opts(default_text_opt)   #text size for key can be changed
+        self.update_text_height = self.update_text_opt.get_font().get_text_height('0')
+        self.update_text_width = self.update_text_opt.get_font().get_text_width('0')
         self.default_left_margin = 10        #not used for switches, switches always display 10 in from the right
         self.default_top_margin = 10
         
@@ -290,6 +298,17 @@ class UnifiApp(Grx.Application):
             self.x_update_pos = default.getint('x_update_pos',self.x_update_pos)
             self.y_update_pos = default.getint('y_update_pos',self.default_update_position)
             self.default_update_position = self.y_update_pos
+            update_text_size = default.getint('update_font_size', None)
+            if update_text_size:
+                self.update_text_opt = Grx.TextOptions.new_full(
+                        # Don't want to use the dpi-aware font here so we can cram info on to small screens (font size, 8,10,12,14 etc)
+                        Grx.Font.load_full('LucidaTypewriter', update_text_size, -1, Grx.FontWeight.REGULAR,
+                                           Grx.FontSlant.REGULAR, Grx.FontWidth.REGULAR, True, None),
+                                           white, black,
+                                           Grx.TextHAlign.LEFT, Grx.TextVAlign.TOP)
+                #text height/width
+                self.update_text_height = self.update_text_opt.get_font().get_text_height('0')
+                self.update_text_width = self.update_text_opt.get_font().get_text_width('0')
 
         if 'ugw' in config:
             ugw = config['ugw']
@@ -323,14 +342,14 @@ class UnifiApp(Grx.Application):
         #x = 30
         #y = 182
         initial_y = y
-        box_size = self.text_height #20
+        box_size = self.update_text_height #20
         spacing = self.key_spacing
         key = OrderedDict( [('>= 2000 MBps', {'shape': 'square', 'color':self.magenta}),
                             ('= 1000 MBps', {'shape': 'square', 'color':self.green}),
                             ('= 100 MBps', {'shape': 'square', 'color':self.yellow}),
                             ('= 10 MBps', {'shape': 'square', 'color':self.cyan}),
-                            ('= Up/DownLink', {'shape': 'circle', 'color':self.green})]
-                          )
+                            ('= Up/DownLink', {'shape': 'circle', 'color':self.green})
+                            ])
         
         x+=spacing*2
         for text, color in key.items():
@@ -338,7 +357,7 @@ class UnifiApp(Grx.Application):
             Grx.draw_filled_rounded_box(x, y, x+box_size, y+box_size, 3, color['color'])
             if color['shape'] == 'circle':
                 Grx.draw_filled_circle(x+box_size//2, y+box_size//2, box_size//4, self.blue)
-            Grx.draw_text(text, x+30, y, self.default_text_opt)
+            Grx.draw_text(text, x+self.update_text_width*5/2, y, self.update_text_opt)
             y+= box_size + spacing
             
         self.redraw_key = False
@@ -356,20 +375,21 @@ class UnifiApp(Grx.Application):
         y = self.y_update_pos
             
         update_offset = 3   #spacing from item above
-        key_top_offset = self.text_height+update_offset
+        key_top_offset = self.update_text_height+update_offset
         #draw last update time text
-        Grx.draw_text(self.last_update_text[:19], max(0,x-10), y+update_offset, self.default_text_opt)
+        Grx.draw_filled_box(max(0,x-10), y+update_offset, max(0,x-10)+self.update_text_opt.get_font().get_text_width(self.last_update_text[:19]), y+update_offset+self.update_text_height, self.black)
+        Grx.draw_text(self.last_update_text[:19], max(0,x-10), y+update_offset, self.update_text_opt)
         
         if self.redraw_key:
-            self.key_height = self.draw_key(x+15, y+key_top_offset+update_offset)
+            self.key_height = self.draw_key(x+self.update_text_width, y+key_top_offset+update_offset)
         
         min_pos = y + key_top_offset    #top of bar graph
         y = min_pos + self.key_height+update_offset   #bottom of bar graph
         
         line_opts = Grx.LineOptions()
-        line_opts.width = self.text_width
+        line_opts.width = self.update_text_width
         offset = self.key_spacing   #between bars
-        height = self.text_height   #of bar
+        height = self.update_text_height   #of bar
         
         #blank bar if it gets to min_pos
         if y-((offset+height)*self.update.value) < min_pos-update_offset:
@@ -415,6 +435,7 @@ class UnifiApp(Grx.Application):
                 log.info('Error getting data: %s' % e)
                 self.last_update = 0
                 time.sleep(5)
+                
             if log.getEffectiveLevel() == logging.DEBUG:
                 with open('data.json', 'w') as f:
                     f.write(json.dumps(devices, indent=2))
@@ -680,7 +701,11 @@ class UnifiApp(Grx.Application):
                     device.store_data(device_data)
         
 class NetworkPort():
-    def __init__(self, x, y, port_number=1, SFP=False, POE=False, port_width=30, port_height=30, initial_data={}, parent=None):
+    port_mode = {   0:'normal',
+                    1:'sfp',
+                    2:'sfp+'}
+    
+    def __init__(self, x, y, port_number=1, port_type=0, POE=False, port_width=30, port_height=30, initial_data={}, parent=None):
     
         #colors and fonts
         self.white = white
@@ -710,9 +735,10 @@ class NetworkPort():
         self.port_number = port_number
         self.port_width = port_width
         self.port_height = port_height
-        self.sfp = SFP
+        self.port_type=port_type
+        self.port_description=self.port_mode.get(port_type,0)
         self.sfp_offset = 0
-        if self.sfp:
+        if self.port_type > 0:
             self.sfp_offset = 10
         self.poe = POE
         
@@ -920,20 +946,20 @@ class NetworkDevice():
             
     type='usw'  #default switch type
 
-    def __init__(self, x, y, ports=24, data=None, model=None, SFP=False, POE=False, port_size=0, text_lines=1):
+    def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
         
-        self.init(x, y, data, model, ports, SFP, POE, port_size, 8, 14, text_lines) #x,y offset of ports, number or lines of text above ports
+        self.init(x, y, data, model, ports, SFP, SFP_PLUS, POE, port_size, 8, 14, text_lines) #x,y offset of ports, number or lines of text above ports
 
         #of rows of ports
         rows = 1
-        if self.num_ports > 12 or self.sfp:
+        if self.num_ports > 12:
             rows = 2
                
         self.init_rows(rows)
         self.update_from_data()
         self.draw_device()
         
-    def init(self,x, y, data, model, ports, SFP, POE, port_size, x_offset=8, y_offset=14, y_lines_text=1):
+    def init(self,x, y, data, model, ports, SFP, SFP_PLUS, POE, port_size, x_offset=8, y_offset=14, y_lines_text=1):
         #colors and fonts
         self.white = white
         self.black = black
@@ -987,14 +1013,18 @@ class NetworkDevice():
         if not self.check_model():
             self.num_ports = ports
             self.sfp=SFP
+            self.sfp_plus=SFP_PLUS
             self.poe=POE
             
         self.org_num_ports = self.num_ports
         self.total_ports = ports    #reported total number of ports including sfp ports
             
-        if self.sfp:
-            self.num_ports+=2
+        if self.sfp > 0 :
+            self.num_ports+=self.sfp
             self.sfp_offset = 10
+            
+        if self.sfp_plus > 0 :
+            self.num_ports+=self.sfp_plus
             
         if self.port_width > 100 and self.num_ports == 1:
             #if we only have 1 large port increase overall width
@@ -1088,7 +1118,8 @@ class NetworkDevice():
             self.description =  model['name']
             self.num_ports = model['ports']
             self.poe =  model.get('poe', False)
-            self.sfp =  model.get('sfp', False)
+            self.sfp =  model.get('sfp', 0)
+            self.sfp_plus =  model.get('sfp+', 0)
             return True
         else:
             self.description = self.name
@@ -1098,15 +1129,10 @@ class NetworkDevice():
         if self.draw_outline(): #if true, ports already exist, so just draw outline
             return
 
-        if self.sfp:
-            if self.model == 'UGWXG':
-                pass
-            else:
-                num_ports = self.num_ports - 1
-        else:
-            num_ports = self.num_ports + 1  #because range does not include the last value
+        num_ports = self.num_ports - self.sfp - self.sfp_plus
 
-        for port in range(1,num_ports):
+        #draw regular ports
+        for port in range(1,num_ports + 1): #because range does not include the last value
             log_nr.info('creating port: %d, ' % port)
             x_pos = port-1
             row = 1
@@ -1116,32 +1142,45 @@ class NetworkDevice():
             x = self.port_x +((x_pos//self.rows)*(self.port_width+self.h_spacing))
             y = self.port_y + (self.v_spacing + self.port_height) * (row-1)
 
-            self.ports[port] = NetworkPort(x, y, port, SFP= True if self.model == 'UGWXG' else False, POE=self.poe, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(port, {}), parent=self)
-                
-        if self.sfp:
-            if 'UGW' in self.model:  #if it's a usg
-                if self.model == 'UGWXG':
-                    #one more port
-                    x += self.sfp_offset+self.port_width+self.h_spacing
-                    log.info('creating sfp port: %d, %d' % (self.num_ports-1, self.num_ports))
-                    self.ports[self.num_ports-1] = NetworkPort(x, self.port_y + (self.v_spacing + self.port_height), self.num_ports-1, SFP=False, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-1, {}), parent=self)
-                else:
-                    #Two more ports
-                    x += self.sfp_offset+self.port_width+self.h_spacing
-                    log.info('creating sfp port: %d, %d' % (self.num_ports-1, self.num_ports))
-                    self.ports[self.num_ports-1] = NetworkPort(x, self.port_y, self.num_ports-1, SFP=True, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-1, {}), parent=self)
-                    x += self.port_width+self.h_spacing
-                    self.ports[self.num_ports] = NetworkPort(x, self.port_y, self.num_ports, SFP=True, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports, {}), parent=self)
-            else:   #else it's a switch
-                #Two more ports
-                x += self.sfp_offset+self.port_width+self.h_spacing
-                log.info('creating sfp port: %d, %d' % (self.num_ports-1, self.num_ports))
-                self.ports[self.num_ports-1] = NetworkPort(x, self.port_y, self.num_ports-1, SFP=True, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-1, {}), parent=self)
-                self.ports[self.num_ports] = NetworkPort(x, self.port_y + self.v_spacing + self.port_height, self.num_ports, SFP=True, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports, {}), parent=self)
+            self.ports[port] = NetworkPort(x, y, port, port_type=0, POE=self.poe, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(port, {}), parent=self)
         
+        #draw sfp+ ports
+        x = self.draw_sfp_ports(x, y, True)
+        #draw sfp ports
+        x = self.draw_sfp_ports(x, y, False)
+
         if self.zoomed:
             self.draw_extra_data()
         self.new = True   #indicate this is a newly created device (so we don't immediately redraw...)
+        
+    def draw_sfp_ports(self, x, y, SFP_PLUS=True):
+        sfp = self.sfp
+        sfp_plus = self.sfp_plus-1
+        port_type=2
+        if SFP_PLUS:
+            if self.sfp_plus == 0:
+                return x
+        else:
+            if self.sfp == 0:
+                return x
+            sfp_plus = -1
+            port_type=1
+            if self.sfp_plus > 0:
+                self.sfp_offset = 0
+        
+        for port in range(sfp+sfp_plus, sfp_plus, -1):
+            if 'UGW' in self.model and self.model != 'UGWXG':  #if it's a usg (SFP ports are in a single row)
+                x += self.sfp_offset+self.port_width+self.h_spacing
+                log.info('creating sfp port: %d, %d' % (self.num_ports-port, self.num_ports))
+                self.ports[self.num_ports-port] = NetworkPort(x, self.port_y, self.num_ports-port, port_type=port_type, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-port, {}), parent=self)
+            else:   #else it's a switch (SFP ports are in two rows)
+                log.info('creating sfp port: %d, %d' % (self.num_ports-port, self.num_ports))
+                if port%2!=0:
+                    x += self.sfp_offset+self.port_width+self.h_spacing
+                    self.ports[self.num_ports-port] = NetworkPort(x, self.port_y, self.num_ports-port, port_type=port_type, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-1, {}), parent=self)
+                else: 
+                    self.ports[self.num_ports-port] = NetworkPort(x, self.port_y + self.v_spacing + self.port_height, self.num_ports-port, port_type=port_type, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports, {}), parent=self)     
+        return x
     
     def draw_outline(self):
         if self.clean:
@@ -1296,7 +1335,7 @@ class NetworkDevice():
                                                                      self.device_params['mem'])
             uptime = 'UP:%-16s' % self.device_params['uptime_text']
             text+= '%*s%s' % (self.box_width-len(text)-len(uptime)-1,'',uptime)
-            self.text = [text, 'IP: %s.  MAC: %s, FW_VER: %s Available: %s' % (self.ip,self.device_params['mac'],self.device_params['fw_ver'], self.device_params['upgrade'])]
+            self.text = [text, 'IP: %s  MAC: %s FW_VER: %s Available: %s' % (self.ip,self.device_params['mac'],self.device_params['fw_ver'], self.device_params['upgrade'])]
         except KeyError:
             self.text = []
         
@@ -1575,51 +1614,51 @@ class NetworkDevice():
 
 class NetworkSwitch(NetworkDevice):
 
-    models = {  'US8' : {'ports':8, 'poe':False, 'sfp':False, 'name':'Unifi Switch 8'},
-                'US8P60' : {'ports':8, 'poe':True, 'sfp':False, 'name': 'Unifi Switch 8 POE-60W'},
-                'US8P150' : {'ports':8, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 8 POE-150W'},
-                'S28150' : {'ports':8, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 8 AT-150W'},
-                'USC8' : {'ports':8, 'poe':False, 'sfp':False, 'name': 'Unifi Switch 8'},
-                'US16P150' : {'ports':16, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 16 POE-150W'},
-                'S216150' : {'ports':16, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 16 AT-150W'},
-                'US24' : {'ports':24, 'poe':False, 'sfp':True, 'name': 'Unifi Switch 24'},
-                'US24P250' : {'ports':24, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 24 POE-250W'},
-                'US24PL2' : {'ports':24, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 24 L2 POE'},
-                'US24P500' : {'ports':24, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 24 POE-500W'},
-                'S224250' : {'ports':24, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 24 AT-250W'},
-                'S224500' : {'ports':24, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 24 AT-500W'},
-                'US48' : {'ports':48, 'poe':False, 'sfp':True, 'name': 'Unifi Switch 48'},
-                'US48P500' : {'ports':48, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 48 POE-500W'},
-                'US48PL2' : {'ports':48, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 48 L2 POE'},
-                'US48P750' : {'ports':48, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 48 POE-750W'},
-                'S248500' : {'ports':48, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 48 AT-500W'},
-                'S248750' : {'ports':48, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 48 AT-750W'},
-                'US6XG150' : {'ports':4, 'poe':True, 'sfp':True, 'name': 'Unifi Switch 6XG POE-150W'},
-                'USXG' : {'ports':12, 'poe':False, 'sfp':True, 'name': 'Unifi Switch 16XG'},
+    models = {  'US8' : {'ports':8, 'poe':False, 'sfp':0, 'sfp+':0, 'name':'Unifi Switch 8'},
+                'US8P60' : {'ports':8, 'poe':True, 'sfp':0, 'sfp+':0, 'name': 'Unifi Switch 8 POE-60W'},
+                'US8P150' : {'ports':8, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 8 POE-150W'},
+                'S28150' : {'ports':8, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 8 AT-150W'},
+                'USC8' : {'ports':8, 'poe':False, 'sfp':0, 'sfp+':0, 'name': 'Unifi Switch 8'},
+                'US16P150' : {'ports':16, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 16 POE-150W'},
+                'S216150' : {'ports':16, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 16 AT-150W'},
+                'US24' : {'ports':24, 'poe':False, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24'},
+                'US24P250' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 POE-250W'},
+                'US24PL2' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 L2 POE'},
+                'US24P500' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 POE-500W'},
+                'S224250' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 AT-250W'},
+                'S224500' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 AT-500W'},
+                'US48' : {'ports':48, 'poe':False, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48'},
+                'US48P500' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 POE-500W'},
+                'US48PL2' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 L2 POE'},
+                'US48P750' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 POE-750W'},
+                'S248500' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 AT-500W'},
+                'S248750' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 AT-750W'},
+                'US6XG150' : {'ports':4, 'poe':True, 'sfp':0, 'sfp+':2, 'name': 'Unifi Switch 6XG POE-150W'},
+                'USXG' : {'ports':4, 'poe':False, 'sfp':0, 'sfp+':12, 'name': 'Unifi Switch 16XG'},
                 }
 
-    def __init__(self, x, y, ports=24, data=None, model=None, SFP=False, POE=False, port_size=0, text_lines=1):
-        super().__init__(x, y, ports=ports, data=data, model=model, SFP=SFP, POE=POE, port_size=port_size, text_lines=text_lines)
+    def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
+        super().__init__(x, y, ports=ports, data=data, model=model, SFP=SFP, SFP_PLUS=SFP_PLUS, POE=POE, port_size=port_size, text_lines=text_lines)
 
 class USG(NetworkDevice):
 
-    models = {  'UGW3'  : {'ports':3, 'poe':False, 'sfp':False, 'name': 'UniFi Security Gateway 3P'},
-                'UGW4'	: {'ports':4, 'poe':False, 'sfp':True, 'name': 'UniFi Security Gateway 4P'},     #4 RJ45's and 2 side by side SFP+
-                'UGWHD4' : {'ports':4, 'poe':False, 'sfp':False, 'name': 'UniFi Security Gateway HD'},   #unknown for now
-                'UGWXG'	: {'ports':8, 'poe':False, 'sfp':True, 'name': 'UniFi Security Gateway XG-8'},   #8 SFP+ 4x2 and 1 RJ45 9lower)
+    models = {  'UGW3'  : {'ports':3, 'poe':False, 'sfp':0, 'sfp+':0, 'name': 'UniFi Security Gateway 3P'},
+                'UGW4'	: {'ports':4, 'poe':False, 'sfp':2, 'sfp+':0, 'name': 'UniFi Security Gateway 4P'},     #4 RJ45's and 2 side by side SFP+
+                'UGWHD4' : {'ports':4, 'poe':False, 'sfp':2, 'sfp+':0, 'name': 'UniFi Security Gateway HD'},   #unknown for now
+                'UGWXG'	: {'ports':1, 'poe':False, 'sfp':0, 'sfp+':8, 'name': 'UniFi Security Gateway XG-8'},   #8 SFP+ 4x2 and 1 RJ45 9lower)
              }
              
     type='ugw'  #USG (gateway) type
 
     def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
-        self.init(x, y, data, model, ports, False, False, port_size, 24, 14, text_lines)
+        self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
    
-        if self.sfp:
-            if self.model == 'UGWXG':
-                self.num_ports=self.org_num_ports+1
-            else:
-                self.num_ports=self.org_num_ports+2
+        if self.sfp > 0:
+            self.num_ports=self.org_num_ports+self.sfp
             
+        if self.sfp_plus > 0:
+            self.num_ports=self.org_num_ports+self.sfp_plus
+
         #of rows of ports
         rows = 1
         if self.model == 'UGWXG':
@@ -1647,7 +1686,7 @@ class USG(NetworkDevice):
                 self.text.append('MAC: %s' % self.device_params['mac'])
                 self.text.append('FW_VER: %s Available: %s' % (self.device_params['fw_ver'], self.device_params['upgrade']))
             for name, ip  in self.ip.items():
-                self.text.append('%-4s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
+                self.text.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
         except KeyError:
             self.text = []
             
@@ -1736,7 +1775,7 @@ class UAP(NetworkDevice):
         x_offset = 8
         if ports == 1:  #make single port AP's a bit wider (so we can fit more text in)
             x_offset = 16
-        self.init(x, y, data, model, ports, False, False, port_size, x_offset, 14, text_lines)
+        self.init(x, y, data, model, ports, 0, 0, False, port_size, x_offset, 14, text_lines)
  
         #distance from outline to text
         self.text_offset = 5
