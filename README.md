@@ -102,6 +102,8 @@ optional arguments:
 
 This is what it looks like:
 ![Network Monitor](monitor.jpg)
+Detail Screen:
+![Switch Screen](detail.jpg)
 
 ### .bashrc
 Here is an example of `.bashrc modifications` - add to the end of the `.bashrc` file to run `unifi.py` automatically
