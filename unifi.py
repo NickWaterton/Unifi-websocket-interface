@@ -16,8 +16,9 @@
 
 # N Waterton V 1.0.1 13th March 2019 - Major re-write to allow different screen resolutions.
 # N.Waterton V 1.1.1 14th May 2019 - Added support for SFP+ ports.
+# N.Waterton V 1.1.2 15th May 2019 - Added secondary port speed for aggregated ports
 
-__VERSION__ = '1.1.1'
+__VERSION__ = '1.1.2'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -758,7 +759,8 @@ class NetworkPort():
             return
         if not self.parent.enabled:
             self.enabled = False
-        log.info('Drawing Port : %d, %s, speed:%s, power:%s as %s' % (self.port_number, self.name, self.speed, self.power, 'ENABLED' if self.enabled else 'DISABLED'))
+        secondary_speed_text = '' if self.secondary_speed is None else '(%s)' % self.secondary_speed
+        log.info('Drawing Port : %d, %s, speed:%s%s, power:%s as %s' % (self.port_number, self.name, self.speed, secondary_speed_text, self.power, 'ENABLED' if self.enabled else 'DISABLED'))
         port_number_text_opts = self.duplicate_text_opts(self.default_text_opt)
         port_number_text_opts.set_fg_color(self.white)
         port_number_text_opts.set_bg_color(self.parent.bg_color)
@@ -781,6 +783,9 @@ class NetworkPort():
                 self.draw_downlink()
             elif self.is_downlink == 1:
                 self.draw_uplink()
+                
+            if self.get_secondary_color() is not None:
+                self.draw_secondary_color()
                 
             text = [self.name[:self.port_width//self.text_width]]
             poe_offset = 0
@@ -826,6 +831,20 @@ class NetworkPort():
 
         points = [pt_1, pt_2, pt_3, pt_1]
         Grx.draw_filled_polygon(points, self.blue)
+        
+    def draw_secondary_color(self):
+        #diagonal fill
+        pt_1 = Grx.Point()
+        pt_2 = Grx.Point()
+        pt_3 = Grx.Point()
+        pt_1.x = self.x
+        pt_1.y = self.y
+        pt_2.x = self.x+self.port_width
+        pt_2.y = self.y
+        pt_3.x = self.x
+        pt_3.y = self.y+self.port_height
+        points = [pt_1, pt_2, pt_3, pt_1]
+        Grx.draw_filled_polygon(points, self.get_secondary_color())
                 
     def get_color(self):
         if self.speed == 0 or not self.enabled:
@@ -841,6 +860,22 @@ class NetworkPort():
         else:
             return self.red
             
+    def get_secondary_color(self):
+        if self.secondary_speed is None or not self.speed or self.speed >= self.secondary_speed:
+            return None
+        if self.secondary_speed == 0 or not self.enabled:
+            return self.black
+        elif self.secondary_speed == 10:
+            return self.cyan
+        elif self.secondary_speed == 100:
+            return self.yellow
+        elif self.secondary_speed == 1000:
+            return self.green
+        elif self.secondary_speed >= 2000:
+            return self.magenta
+        else:
+            return self.red
+            
     @property      
     def speed(self):
         return self.port_params.get('speed', 0)
@@ -848,6 +883,14 @@ class NetworkPort():
     @speed.setter      
     def speed(self, value):
         self.port_params['speed'] = value
+        
+    @property      
+    def secondary_speed(self):
+        return self.port_params.get('secondary_speed', None)
+        
+    @secondary_speed.setter      
+    def secondary_speed(self, value):
+        self.port_params['secondary_speed'] = value
         
     @property      
     def power(self):
@@ -909,6 +952,9 @@ class NetworkPort():
       
     def set_port_speed(self, speed=0):
         self.commit['speed'] = speed
+        
+    def set_port_secondary_speed(self, speed=0):
+        self.commit['secondary_speed'] = speed
             
     def set_port_power(self, power=0):
         self.commit['power'] = power
@@ -1403,7 +1449,10 @@ class NetworkDevice():
                     #port is aggregated
                     if port.get("aggregated_by", False):
                         #port is secondary port
-                        self.set_port_name(port_number, 'AG:%d' % port["aggregated_by"])
+                        self.set_port_name(port_number, 'AG %d' % port["aggregated_by"])
+                        ag_speed = self.get_port_speed(port["aggregated_by"])
+                        if ag_speed is not None:
+                            self.set_port_speed_secondary(port_number, ag_speed)
                     else:
                         #port is primary port   
                         if port.get("lacp_state", False):
@@ -1412,7 +1461,6 @@ class NetworkDevice():
                                 if agg_port["active"]:
                                     #mem_port = agg_port["member_port"]
                                     speed+=agg_port["speed"]
-                            #log.info('updating Agg port: %s, speed: %s ' % (port_number,speed))
                             self.set_port_speed(port_number, speed)
                     
             port = self.data["uplink"]   #uplink is not there if not online
@@ -1427,6 +1475,10 @@ class NetworkDevice():
                     to_uplink_port = port.get("uplink_remote_port",None)  #uplink_remote_port is not there if heatbeat missing
                     if to_uplink_port is not None:
                         self.set_port_name(lag_port["member_port"], 'To:%s' % to_uplink_port)
+                    
+                    if self.get_port_speed(uplink_port) > lag_port["speed"]:
+                        #log.info('updating lag port: %s, speed: %s uplink speed: %s' % (lag_port["member_port"],lag_port["speed"], self.get_port_speed(uplink_port)))
+                        self.set_port_speed_secondary(lag_port["member_port"], self.get_port_speed(uplink_port))
 
             #log.info('updating uplink port: %s, speed: %s ' % (uplink_port,port["speed"]))
             self.set_port_speed(uplink_port, port["speed"])
@@ -1525,6 +1577,20 @@ class NetworkDevice():
             self.ports[port].set_port_speed(speed)
         else:
             self.update_port_initial_data(port, {'speed':speed}) 
+                
+    def set_port_speed_secondary(self, port, speed=0):
+        port = self.get_port_from_string(port)
+        if port in self.ports:
+            self.ports[port].set_port_secondary_speed(speed)
+        else:
+            self.update_port_initial_data(port, {'secondary_speed':speed}) 
+            
+    def get_port_speed(self, port):
+        port = self.get_port_from_string(port)
+        if port in self.ports:
+            return self.ports[port].speed
+        else:
+            return self.initial_port_data[port].get('speed',None)
             
     def set_port_power(self, port, power=0):
         port = self.get_port_from_string(port)

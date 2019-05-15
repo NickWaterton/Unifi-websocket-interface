@@ -1,5 +1,4 @@
 *.json
 *.log
-*.xml
 __pycache__
 keyring.tar.gz
