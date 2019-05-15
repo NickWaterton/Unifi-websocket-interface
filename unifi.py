@@ -15,7 +15,7 @@
 #
 
 # N Waterton V 1.0.1 13th March 2019 - Major re-write to allow different screen resolutions.
-# N. Waterton V 1.1.1 14th may 2019 - Added support for SFP+ ports.
+# N.Waterton V 1.1.1 14th May 2019 - Added support for SFP+ ports.
 
 __VERSION__ = '1.1.1'
 
@@ -43,7 +43,7 @@ import logging
 from logging.handlers import RotatingFileHandler     
         
 class UnifiApp(Grx.Application):
-    """Base class for simple (non-interactive) demo apps"""
+    """Base class for simple UniFi display"""
     def __init__(self, arg):
         super(Grx.Application, self).__init__()
         self.init()
@@ -477,7 +477,7 @@ class UnifiApp(Grx.Application):
                             self.custom_working[name][device_id] = self.custom[name].pop(device_id)
                             log.info('Custom config device_id: %s (%s) found in %s' % (device_id, device["name"], name))
             except KeyError as e:
-                log.error('Key Error: %s' % e) 
+                log.error('Custom Dicts: Key Error: %s' % e) 
                 del self.custom_working[name]
                 return
                 
@@ -528,8 +528,7 @@ class UnifiApp(Grx.Application):
             elif device["type"]=='ugw':
                 usgs.append(device)
             elif device["type"]=='uap':
-                if len(uaps) < 9:           #for debugging
-                    uaps.append(device)
+                uaps.append(device)
                     
         log.info('number of usgs: %s, switches: %s, aps: %s' % (len(usgs),len(switches),len(uaps)))
         
@@ -1455,7 +1454,7 @@ class NetworkDevice():
                                  radio_info=self.radio_info if self.radio_info != '' else None)
 
         except KeyError as e:
-            log.info('Key error: %s' % e)
+            log.info('Update data: Key error: %s' % e)
             self.set_device_enabled(self.data["state"])
             
         self.commit_changes()
