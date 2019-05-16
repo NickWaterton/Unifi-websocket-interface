@@ -779,13 +779,13 @@ class NetworkPort():
                 port_color = self.red
             Grx.draw_rounded_box(self.x, self.y, self.x+self.port_width, self.y+self.port_height, 3, port_color)
         else:
+            if self.get_secondary_color() is not None:
+                self.draw_secondary_color()
+
             if self.is_downlink == -1:
                 self.draw_downlink()
             elif self.is_downlink == 1:
-                self.draw_uplink()
-                
-            if self.get_secondary_color() is not None:
-                self.draw_secondary_color()
+                self.draw_uplink()               
                 
             text = [self.name[:self.port_width//self.text_width]]
             poe_offset = 0
