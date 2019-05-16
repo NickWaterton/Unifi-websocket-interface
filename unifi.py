@@ -17,8 +17,9 @@
 # N Waterton V 1.0.1 13th March 2019 - Major re-write to allow different screen resolutions.
 # N.Waterton V 1.1.1 14th May 2019 - Added support for SFP+ ports.
 # N.Waterton V 1.1.2 15th May 2019 - Added secondary port speed for aggregated ports
+# N.Waterton V 1.1.3 16th May 2019 - Made 'models' a loadable file
 
-__VERSION__ = '1.1.2'
+__VERSION__ = '1.1.3'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -980,7 +981,9 @@ class NetworkDevice():
     default device is a switch...
     '''
 
-    models = {}
+    models = {}     #NOTE models defined in 'models.json' will override anything defined here or in subclasses
+    
+    updated = False #used to detect when new models have been loaded from file
     
     states={0:{'text':['Off','Line','','','','',''], 'enabled':False},
             1:{'text':None, 'enabled':True},
@@ -992,7 +995,7 @@ class NetworkDevice():
     type='usw'  #default switch type
 
     def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
-        
+        self.load_models()
         self.init(x, y, data, model, ports, SFP, SFP_PLUS, POE, port_size, 8, 14, text_lines) #x,y offset of ports, number or lines of text above ports
 
         #of rows of ports
@@ -1119,6 +1122,21 @@ class NetworkDevice():
         self.clean = False
         
         self.initial_port_data = {}
+        
+    def load_models(self):
+        try:
+            if os.path.isfile('models.json') and not type(self).updated:
+                with open('models.json', 'r') as f:
+                    data = json.load(f)
+                    
+                models = data.get(self.type.upper(), None)
+                if models:
+                    self.models.update(models)
+                    log.info('Loaded %s device models from file models.json' % len(models))
+                    type(self).updated = True
+                    
+        except Exception as e:
+            log.exception('Error loading models file: %s' % e)
         
     def human_size(self,size_bytes):
         """
@@ -1716,6 +1734,7 @@ class USG(NetworkDevice):
     type='ugw'  #USG (gateway) type
 
     def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
+        self.load_models()
         self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
    
         if self.sfp > 0:
@@ -1836,6 +1855,7 @@ class UAP(NetworkDevice):
 
     def __init__(self, x, y, ports=2, data=None, model=None, port_size=0, text_lines=3, dry_run=False):  
         log.info('AP: %s, ports = %d' % (model,ports))
+        self.load_models()
         
         x_offset = 8
         if ports == 1:  #make single port AP's a bit wider (so we can fit more text in)
@@ -1968,7 +1988,16 @@ def main():
     log_nr = logging.getLogger('Main_No_Return')
     
     log.debug('Debug mode')
-    
+
+    #generates a base 'models' file if it doesn't exist
+    if log.getEffectiveLevel() == logging.DEBUG:
+        if not os.path.isfile('models.json'):
+            with open('models.json', 'w') as f:
+                models = {'USW':NetworkSwitch.models,
+                          'UGW':USG.models,
+                          'UAP':UAP.models}
+                f.write(json.dumps(models, indent=2))
+
     GLib.set_prgname('unifi.py')
     GLib.set_application_name('Unifi Status Screen')
     app = UnifiApp(arg)
