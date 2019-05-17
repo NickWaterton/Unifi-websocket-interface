@@ -18,8 +18,9 @@
 # N.Waterton V 1.1.1 14th May 2019 - Added support for SFP+ ports.
 # N.Waterton V 1.1.2 15th May 2019 - Added secondary port speed for aggregated ports
 # N.Waterton V 1.1.3 16th May 2019 - Made 'models' a loadable file
+# N.Waterton V 1.1.4 17th May 2019 - Added simulation mode
 
-__VERSION__ = '1.1.3'
+__VERSION__ = '1.1.4'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -221,6 +222,8 @@ class UnifiApp(Grx.Application):
                                   }
         self.text_lines = self.default_text_lines.copy()
         self.default_update_position = None  #where the key etc is displayed (y pos) - initially None (no display) until USG is drawn, so we can position it below the USG
+        if self.arg.simulate:
+            self.default_update_position = self.y//2
         self.key_height = None               #Key height - gets figured out when key is drawn
         self.key_spacing = 5                 #y spacing between key boxes
         self.update_height = None            #height of update display - gets figured out when it's displayed
@@ -424,13 +427,22 @@ class UnifiApp(Grx.Application):
         return GLib.SOURCE_CONTINUE
 
     def get_unifi_data(self):
-        client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify)
+        simulate_update = True
+        if not self.arg.simulate:
+            client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify)
         while not self.exit.value:
             try:
                 with self.update.get_lock():
                     self.update.value+=1
                 log.info('Refreshing Data')
-                devices = client.devices()
+                if self.arg.simulate:
+                    if simulate_update:
+                        devices = self.arg.simulate
+                        simulate_update = False
+                    else:
+                        time.sleep(5)
+                else:
+                    devices = client.devices()
                 self.q.put(devices)
                 log.info('Data Updated')
             except Exception as e:
@@ -613,6 +625,8 @@ class UnifiApp(Grx.Application):
                         log.info('USG right: %s' % devices[id].device_right)
                     elif type == 'uap':
                         #first run is always a dry run
+                        #if self.arg.simulate:
+                        #    self.ap_spacing = 10
                         extra_text = self.ap_extra_text
                         port_size = max(port_size,self.min_port_size)
                         log.info('creating uap: %s at x: %s, spacing: %s port_size: %s, extra_text: %s' % (name, x, spacing, port_size, extra_text))
@@ -997,13 +1011,8 @@ class NetworkDevice():
     def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
         self.load_models()
         self.init(x, y, data, model, ports, SFP, SFP_PLUS, POE, port_size, 8, 14, text_lines) #x,y offset of ports, number or lines of text above ports
-
-        #of rows of ports
-        rows = 1
-        if self.num_ports > 12:
-            rows = 2
-               
-        self.init_rows(rows)
+      
+        self.init_rows(self.rows)
         self.update_from_data()
         self.draw_device()
         
@@ -1063,17 +1072,30 @@ class NetworkDevice():
             self.sfp=SFP
             self.sfp_plus=SFP_PLUS
             self.poe=POE
+            #of rows of ports
+            self.rows = 1
+            if self.num_ports > 12:
+                self.rows = 2
+            self.sfp_rows = self.rows
+            self.sfp_plus_rows = self.rows
+            self.max_rows = self.rows
+            self.order = [0,2,1]
             
         self.org_num_ports = self.num_ports
         self.total_ports = ports    #reported total number of ports including sfp ports
+        
+        self.device_ports_width = 0
+        if self.num_ports > 0:
+            self.device_ports_width += self.num_ports//self.rows
             
-        if self.sfp > 0 :
-            self.num_ports+=self.sfp
+        if self.sfp > 0:
+            self.device_ports_width += self.sfp//self.sfp_rows
             self.sfp_offset = 10
             
-        if self.sfp_plus > 0 :
-            self.num_ports+=self.sfp_plus
-            
+        if self.sfp_plus > 0:
+            self.device_ports_width += self.sfp_plus//self.sfp_plus_rows
+            self.sfp_offset = 10
+           
         if self.port_width > 100 and self.num_ports == 1:
             #if we only have 1 large port increase overall width
             self.x_offset+=self.port_width//2
@@ -1081,28 +1103,28 @@ class NetworkDevice():
         self.new=False   #indicate this is a newly created device, set to false as we are not created yet, will be set later when we have been created
   
     def init_rows(self, rows=1):
-        if self.num_ports != self.total_ports:
+        if self.num_ports + self.sfp + self.sfp_plus != self.total_ports:
             log.info('WARNING: number of ports configured: %d, does not match number of ports reported: %d' % (self.num_ports, self.total_ports))
     
         self.rows = rows
         if self.x is None:
-            self.x = max(0, Grx.get_width()//2 - (self.num_ports//self.rows * (self.port_width+self.h_spacing) + self.sfp_offset+(2*self.x_offset))//2)
+            self.x = max(0, Grx.get_width()//2 - (self.device_ports_width * (self.port_width+self.h_spacing) + self.sfp_offset+(2*self.x_offset))//2)
         if self.x < 0:  #auto position x from right edge
             self.x_right_margin = -self.x
-            self.x = max(0, Grx.get_width() - (self.num_ports//self.rows * (self.port_width+self.h_spacing) + self.sfp_offset+(2*self.x_offset)+self.x_right_margin))
+            self.x = max(0, Grx.get_width() - (self.device_ports_width * (self.port_width+self.h_spacing) + self.sfp_offset+(2*self.x_offset)+self.x_right_margin))
             
         #port position   
         self.port_x = self.x+self.x_offset
         self.port_y = self.y+self.y_offset
         
         #device parameters
-        self.device_bottom = self.y+self.y_offset-self.text_height//2+(self.port_height+self.v_spacing)*self.rows
-        self.device_right = self.x+self.sfp_offset+self.x_offset*2+(self.port_width+self.h_spacing)*(self.num_ports//self.rows)
+        self.device_bottom = self.y+self.y_offset-self.text_height//2+(self.port_height+self.v_spacing)*self.max_rows
+        self.device_right = self.x+self.sfp_offset+self.x_offset*2+(self.port_width+self.h_spacing)*self.device_ports_width
         while self.device_right >= Grx.get_width() or self.device_bottom >= Grx.get_height():
             self.port_width-=1
             self.port_height-=1
-            self.device_bottom = self.y+self.y_offset-self.text_height//2+(self.port_height+self.v_spacing)*self.rows
-            self.device_right = self.x+self.sfp_offset+self.x_offset*2+(self.port_width+self.h_spacing)*(self.num_ports//self.rows)
+            self.device_bottom = self.y+self.y_offset-self.text_height//2+(self.port_height+self.v_spacing)*self.max_rows
+            self.device_right = self.x+self.sfp_offset+self.x_offset*2+(self.port_width+self.h_spacing)*self.device_ports_width
         self.device_width = self.device_right - self.x
         self.device_height = self.device_bottom - self.y
         self.box_width = self.device_width//self.text_width
@@ -1122,18 +1144,19 @@ class NetworkDevice():
         self.clean = False
         
         self.initial_port_data = {}
-        
-    def load_models(self):
+    
+    @classmethod
+    def load_models(cls):
         try:
-            if os.path.isfile('models.json') and not type(self).updated:
+            if os.path.isfile('models.json') and not cls.updated:
                 with open('models.json', 'r') as f:
                     data = json.load(f)
                     
-                models = data.get(self.type.upper(), None)
+                models = data.get(cls.type.upper(), None)
                 if models:
-                    self.models.update(models)
+                    cls.models.update(models)
                     log.info('Loaded %s device models from file models.json' % len(models))
-                    type(self).updated = True
+                    cls.updated=True
                     
         except Exception as e:
             log.exception('Error loading models file: %s' % e)
@@ -1179,71 +1202,88 @@ class NetworkDevice():
         if self.model in self.models.keys():
             model = self.models[self.model]
             self.description =  model['name']
-            self.num_ports = model['ports']
+            if isinstance(model['ports'], dict):
+                self.num_ports = model['ports']['number']
+                self.rows = model['ports']['rows']
+            else:
+                self.num_ports = model['ports']
+                self.rows = 1
             self.poe =  model.get('poe', False)
-            self.sfp =  model.get('sfp', 0)
-            self.sfp_plus =  model.get('sfp+', 0)
+            if isinstance(model.get('sfp'), dict):
+                self.sfp =  model['sfp'].get('number', 0)
+                self.sfp_rows =  model['sfp'].get('rows', 0)
+            else:
+                self.sfp = 0
+                self.sfp_rows = 0
+            if isinstance(model.get('sfp+'), dict):
+                self.sfp_plus =  model['sfp+'].get('number', 0)
+                self.sfp_plus_rows =  model['sfp+'].get('rows', 0)
+            else:
+                self.sfp_plus = 0
+                self.sfp_plus_rows = 0
+            self.order = model.get('order', [0,2,1])
+            self.max_rows = max(self.rows,self.sfp_rows,self.sfp_plus_rows)
+            log.info('FOUND model: %s in database as %s' % (self.model, self.description))
             return True
         else:
             self.description = self.name
+            log.info('model: %s NOT FOUND in database, guessing parameters' % self.model)
             return False
         
     def draw_device(self):
         if self.draw_outline(): #if true, ports already exist, so just draw outline
             return
-
-        num_ports = self.num_ports - self.sfp - self.sfp_plus
-
-        #draw regular ports
-        for port in range(1,num_ports + 1): #because range does not include the last value
-            log_nr.info('creating port: %d, ' % port)
-            x_pos = port-1
-            row = 1
-            if port % 2 == 0 and self.rows > 1:    #even ports
-                row = 2
-                
-            x = self.port_x +((x_pos//self.rows)*(self.port_width+self.h_spacing))
-            y = self.port_y + (self.v_spacing + self.port_height) * (row-1)
-
-            self.ports[port] = NetworkPort(x, y, port, port_type=0, POE=self.poe, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(port, {}), parent=self)
+        self.draw_ports()    
+            
+    def draw_ports(self):
+        #draw ports
+        x = self.port_x-self.port_width-self.h_spacing
+        y = self.port_y #unused at the moment
+        num_ports = 0 #port numbering starts at (plus 1)
+        self.sfp_offset = 0
+        spacing = 0
         
-        #draw sfp+ ports
-        x = self.draw_sfp_ports(x, y, True)
-        #draw sfp ports
-        x = self.draw_sfp_ports(x, y, False)
-
+        for count, port_type in enumerate(self.order):
+            if port_type == 0:
+                x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.num_ports, self.rows, 0)
+                    
+            if port_type == 1:
+                #draw sfp ports
+                x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.sfp, self.sfp_rows, 1)   
+                    
+            if port_type == 2:
+                #draw sfp+ ports
+                x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.sfp_plus, self.sfp_plus_rows, 2)
+                
+            if ports_drawn:
+                spacing+=1     
+            if spacing == 1:
+                self.sfp_offset = 10
+            else:
+                self.sfp_offset = 0
+            
         if self.zoomed:
             self.draw_extra_data()
         self.new = True   #indicate this is a newly created device (so we don't immediately redraw...)
         
-    def draw_sfp_ports(self, x, y, SFP_PLUS=True):
-        sfp = self.sfp
-        sfp_plus = self.sfp_plus-1
-        port_type=2
-        if SFP_PLUS:
-            if self.sfp_plus == 0:
-                return x
-        else:
-            if self.sfp == 0:
-                return x
-            sfp_plus = -1
-            port_type=1
-            if self.sfp_plus > 0:
-                self.sfp_offset = 0
-        
-        for port in range(sfp+sfp_plus, sfp_plus, -1):
-            if 'UGW' in self.model and self.model != 'UGWXG':  #if it's a usg (SFP ports are in a single row)
-                x += self.sfp_offset+self.port_width+self.h_spacing
-                log.info('creating sfp port: %d, %d' % (self.num_ports-port, self.num_ports))
-                self.ports[self.num_ports-port] = NetworkPort(x, self.port_y, self.num_ports-port, port_type=port_type, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-port, {}), parent=self)
-            else:   #else it's a switch (SFP ports are in two rows)
-                log.info('creating sfp port: %d, %d' % (self.num_ports-port, self.num_ports))
-                if port%2!=0:
-                    x += self.sfp_offset+self.port_width+self.h_spacing
-                    self.ports[self.num_ports-port] = NetworkPort(x, self.port_y, self.num_ports-port, port_type=port_type, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports-1, {}), parent=self)
-                else: 
-                    self.ports[self.num_ports-port] = NetworkPort(x, self.port_y + self.v_spacing + self.port_height, self.num_ports-port, port_type=port_type, POE=False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(self.num_ports, {}), parent=self)     
-        return x
+    def draw_port(self, x, y, num, ports, rows, port_type):
+        if ports == 0:
+            return x, num, False
+        num+=1
+        x+=self.sfp_offset 
+        for port in range(num,num+ports): #because range does not include the last value
+            log_nr.info('creating port: %d, ' % port)
+            
+            row = (port-1)%rows + 1     
+            if row == 1: 
+                x += self.port_width+self.h_spacing
+                
+            if self.max_rows > rows:   #draw ports at lower row position
+                row = self.max_rows
+            y = self.port_y + (self.v_spacing + self.port_height) * (row-1)
+
+            self.ports[port] = NetworkPort(x, y, port, port_type=port_type, POE=self.poe if port_type==0 else False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(port, {}), parent=self)
+        return x, port, True
     
     def draw_outline(self):
         if self.clean:
@@ -1435,7 +1475,7 @@ class NetworkDevice():
             self.set_device_name(self.data.get("name", ''))
             self.set_device_enabled(self.data["state"])
             #log.info('updating device IP : %s ' % (self.data.get("ip", None)))
-            self.set_ip(self.data.get("ip", None))
+            self.set_ip(self.data.get("ip", '0.0.0.0'))
 
             downlinks = self.data.get("downlink_table",[])
             for downlink in downlinks:
@@ -1527,6 +1567,9 @@ class NetworkDevice():
             log.info('Update data: Key error: %s' % e)
             self.set_device_enabled(self.data["state"])
             
+        if self.data.get('simulated_device'):
+            self.simulate_data()
+            
         self.commit_changes()
         
     def update_from_data_device_specific(self):
@@ -1535,6 +1578,32 @@ class NetworkDevice():
         '''
         pass
         
+    def simulate_data(self):
+        uptime = int(time.time() - self.data.get('simulated_uptime', 0))
+        self.update_data(    temp=25,
+                             fan=25,
+                             power=33,
+                             load='1.0,1.1,1.2',
+                             mem=50,
+                             uptime=1082806 + uptime,
+                             mac='00:00:00:00:00:00',
+                             fw_ver='1.2.3.4.5',
+                             upgrade=None,
+                             radio_info=None)
+                             
+        for port in self.ports:
+            #log.info('SIMULATED set port: %d' % port)
+            if self.ports[port].port_type == 0:
+                name = 'Norm'
+            else:
+                name = self.ports[port].port_description.upper()
+            self.set_port_name(port, '%s' % (name))
+            if random.choice([1,0,0,0]):
+                self.set_port_speed(port, random.choice([10,100,100,100,1000,1000,1000,1000,2000]))
+            if random.choice([1,0,0,]):
+                self.set_port_enabled(port, random.choice([1,1,1,1,0]))
+            if random.choice([1,0]):
+                self.set_port_power(port, random.choice(['1.4','4.5','8.4','15.2','0','0','0','0','0']))
             
     def commit_changes(self, forced=False):
         if self.new:    #if we are a new device, don't redraw immediately
@@ -1697,27 +1766,27 @@ class NetworkDevice():
 
 class NetworkSwitch(NetworkDevice):
 
-    models = {  'US8' : {'ports':8, 'poe':False, 'sfp':0, 'sfp+':0, 'name':'Unifi Switch 8'},
-                'US8P60' : {'ports':8, 'poe':True, 'sfp':0, 'sfp+':0, 'name': 'Unifi Switch 8 POE-60W'},
-                'US8P150' : {'ports':8, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 8 POE-150W'},
-                'S28150' : {'ports':8, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 8 AT-150W'},
-                'USC8' : {'ports':8, 'poe':False, 'sfp':0, 'sfp+':0, 'name': 'Unifi Switch 8'},
-                'US16P150' : {'ports':16, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 16 POE-150W'},
-                'S216150' : {'ports':16, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 16 AT-150W'},
-                'US24' : {'ports':24, 'poe':False, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24'},
-                'US24P250' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 POE-250W'},
-                'US24PL2' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 L2 POE'},
-                'US24P500' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 POE-500W'},
-                'S224250' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 AT-250W'},
-                'S224500' : {'ports':24, 'poe':True, 'sfp':2, 'sfp+':0, 'name': 'Unifi Switch 24 AT-500W'},
-                'US48' : {'ports':48, 'poe':False, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48'},
-                'US48P500' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 POE-500W'},
-                'US48PL2' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 L2 POE'},
-                'US48P750' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 POE-750W'},
-                'S248500' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 AT-500W'},
-                'S248750' : {'ports':48, 'poe':True, 'sfp':2, 'sfp+':2, 'name': 'Unifi Switch 48 AT-750W'},
-                'US6XG150' : {'ports':4, 'poe':True, 'sfp':0, 'sfp+':2, 'name': 'Unifi Switch 6XG POE-150W'},
-                'USXG' : {'ports':4, 'poe':False, 'sfp':0, 'sfp+':12, 'name': 'Unifi Switch 16XG'},
+    models = {  'US8' : {'ports':{'number':8, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name':'Unifi Switch 8'},
+                'US8P60' : {'ports':{'number':8, 'rows':1}, 'poe':True, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 8 POE-60W'},
+                'US8P150' : {'ports':{'number':8, 'rows':1}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 8 POE-150W'},
+                'S28150' : {'ports':{'number':8, 'rows':1}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 8 AT-150W'},
+                'USC8' : {'ports':{'number':8, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 8'},
+                'US16P150' : {'ports':{'number':16, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 16 POE-150W'},
+                'S216150' : {'ports':{'number':16, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 16 AT-150W'},
+                'US24' : {'ports':{'number':24, 'rows':2}, 'poe':False, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 24'},
+                'US24P250' : {'ports':{'number':24, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 24 POE-250W'},
+                'US24PL2' : {'ports':{'number':24, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 24 L2 POE'},
+                'US24P500' : {'ports':{'number':24, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 24 POE-500W'},
+                'S224250' : {'ports':{'number':24, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 24 AT-250W'},
+                'S224500' : {'ports':{'number':24, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':0, 'rows':0}, 'name': 'Unifi Switch 24 AT-500W'},
+                'US48' : {'ports':{'number':48, 'rows':2}, 'poe':False, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':2, 'rows':2}, 'name': 'Unifi Switch 48'},
+                'US48P500' : {'ports':{'number':48, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':2, 'rows':2}, 'name': 'Unifi Switch 48 POE-500W'},
+                'US48PL2' : {'ports':{'number':48, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':2, 'rows':2}, 'name': 'Unifi Switch 48 L2 POE'},
+                'US48P750' : {'ports':{'number':48, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':2, 'rows':2}, 'name': 'Unifi Switch 48 POE-750W'},
+                'S248500' : {'ports':{'number':48, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':2, 'rows':2}, 'name': 'Unifi Switch 48 AT-500W'},
+                'S248750' : {'ports':{'number':48, 'rows':2}, 'poe':True, 'sfp':{'number':2, 'rows':2}, 'sfp+':{'number':2, 'rows':2}, 'name': 'Unifi Switch 48 AT-750W'},
+                'US6XG150' : {'ports':{'number':4, 'rows':1}, 'poe':True, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':2, 'rows':1}, 'name': 'Unifi Switch 6XG POE-150W'},
+                'USXG' : {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':12, 'rows':2}, 'order': [2,0,1], 'name': 'Unifi Switch 16XG'},
                 }
 
     def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
@@ -1725,10 +1794,10 @@ class NetworkSwitch(NetworkDevice):
 
 class USG(NetworkDevice):
 
-    models = {  'UGW3'  : {'ports':3, 'poe':False, 'sfp':0, 'sfp+':0, 'name': 'UniFi Security Gateway 3P'},
-                'UGW4'	: {'ports':4, 'poe':False, 'sfp':2, 'sfp+':0, 'name': 'UniFi Security Gateway 4P'},     #4 RJ45's and 2 side by side SFP+
-                'UGWHD4' : {'ports':4, 'poe':False, 'sfp':2, 'sfp+':0, 'name': 'UniFi Security Gateway HD'},   #unknown for now
-                'UGWXG'	: {'ports':1, 'poe':False, 'sfp':0, 'sfp+':8, 'name': 'UniFi Security Gateway XG-8'},   #8 SFP+ 4x2 and 1 RJ45 9lower)
+    models = {  'UGW3'  : {'ports':{'number':3, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway 3P'},
+                'UGW4'	: {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':2, 'rows':1}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway 4P'},     #4 RJ45's and 2 side by side SFP+
+                'UGWHD4' : {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':2, 'rows':1}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway HD'},   #unknown for now
+                'UGWXG'	: {'ports':{'number':1, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':1}, 'sfp+':{'number':8, 'rows':2}, 'order': [2,0,1], 'name': 'UniFi Security Gateway XG-8'},   #8 SFP+ 4x2 and 1 RJ45 9lower)
              }
              
     type='ugw'  #USG (gateway) type
@@ -1736,20 +1805,9 @@ class USG(NetworkDevice):
     def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
         self.load_models()
         self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
-   
-        if self.sfp > 0:
-            self.num_ports=self.org_num_ports+self.sfp
-            
-        if self.sfp_plus > 0:
-            self.num_ports=self.org_num_ports+self.sfp_plus
-
-        #of rows of ports
-        rows = 1
-        if self.model == 'UGWXG':
-            rows = 2
-            
-        self.init_rows(rows)
-        self.ip = OrderedDict()
+ 
+        self.init_rows(self.rows)
+        self.ip = OrderedDict() #USG has more than one ip address
         self.update_from_data()
         self.draw_device()
    
@@ -1806,15 +1864,16 @@ class USG(NetworkDevice):
                       ]
                     
         text.append('--WAN')
-        for key, value in sorted(self.data["uplink"].items()):
-            if key in data_table+bytes_table:
-                if isinstance(value, list):
-                    for item in value:
-                        text.append('%-12s : %s' % (key, item))
-                else:
-                    if key in bytes_table: 
-                        value = self.human_size(value)
-                    text.append('%-12s : %s' % (key, value))
+        if self.data.get("uplink"):
+            for key, value in sorted(self.data["uplink"].items()):
+                if key in data_table+bytes_table:
+                    if isinstance(value, list):
+                        for item in value:
+                            text.append('%-12s : %s' % (key, item))
+                    else:
+                        if key in bytes_table: 
+                            value = self.human_size(value)
+                        text.append('%-12s : %s' % (key, value))
         return text
         
 class UAP(NetworkDevice):
@@ -1865,7 +1924,7 @@ class UAP(NetworkDevice):
         #distance from outline to text
         self.text_offset = 5
         #of rows of ports
-        self.init_rows(1)
+        self.init_rows(self.rows)
         if not dry_run:
             self.update_from_data()
             self.draw_device()
@@ -1919,12 +1978,13 @@ class UAP(NetworkDevice):
                         "min_rssi_enabled",
                     ]
         
-        for data in self.data["radio_table"]:
-            text.append('--%s' % data["name"])
-            for key, value in sorted(data.items()):
-                if key in radio_data:
-                    text.append('%-21s : %s' % (key, value))
-            text[-1]=text[-1]+'\n'  #start new column
+        if self.data.get("radio_table"):
+            for data in self.data["radio_table"]:
+                text.append('--%s' % data["name"])
+                for key, value in sorted(data.items()):
+                    if key in radio_data:
+                        text.append('%-21s : %s' % (key, value))
+                text[-1]=text[-1]+'\n'  #start new column
         return text
 
             
@@ -1951,6 +2011,38 @@ def setup_logger(logger_name, log_file, level=logging.DEBUG, console=False, no_r
         print("Error in Logging setup: %s - do you have permission to write the log file??" % e)
         sys.exit(1)
         
+def simulate_device(device, num=None):
+    data = {"model": device}
+    data['simulated_device']=True
+    data['simulated_uptime']=time.time()
+    data["device_id"]='999999999' if num is None else str(num)
+    data["_id"]=data["device_id"]
+    data["name"]='Simulated Device%s' % ('' if num is None else ' %d' % num)
+    data["ethernet_table"]=[]
+    data["state"]=1
+    data['port_table']=[]
+    if device in NetworkSwitch.models.keys():
+        data['type'] = 'usw'
+    elif device in USG.models.keys():
+        data['type'] = 'ugw'
+    elif device in UAP.models.keys():
+        data['type'] = 'uap'
+    else:
+        log.warn('device %s not found in database, please add it to devices.json (use -D to create models.json file)' % device)
+        sys.exit(1)
+    return data
+    
+def list_devices():
+    NetworkSwitch.load_models()
+    for device in NetworkSwitch.models.keys():
+        log.info('Switch: %s (%s)' % (device, NetworkSwitch.models[device]['name']))
+    USG.load_models()
+    for device in USG.models.keys():
+        log.info('USG: %s (%s)' % (device, USG.models[device]['name']))
+    UAP.load_models()
+    for device in UAP.models.keys():
+        log.info('UAP: %s (%s)' % (device, UAP.models[device]['name']))
+        
 def main():
     global log
     global log_nr
@@ -1967,6 +2059,8 @@ def main():
     parser.add_argument('-c','--custom', action="store", default=None, help='use custom layout (default=None)')
     parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
     parser.add_argument('-D','--debug', action='store_true', help='debug mode', default = False)
+    parser.add_argument('-li','--list', action='store_true', help='list built in devices (for use in simulation)', default = False)
+    parser.add_argument('-S','--simulate', action="store", default=None, help='simulate device - pass device type as argument, eg US48P750 (default=None)')
     parser.add_argument('-V','--version', action='version',version='%(prog)s {version}'.format(version=__VERSION__))
     
     arg = parser.parse_args()
@@ -1988,6 +2082,22 @@ def main():
     log_nr = logging.getLogger('Main_No_Return')
     
     log.debug('Debug mode')
+    
+    if arg.list:
+        list_devices()
+        sys.exit(0)
+    
+    #simulate a device for testing
+    if arg.simulate:
+        arg.custom = None
+        device = arg.simulate
+        arg.simulate = []
+        if device in UAP.models.keys():
+            for i in range(5):
+                arg.simulate.append(simulate_device(device, i))
+        else:
+            arg.simulate.append(simulate_device(device))
+             
 
     #generates a base 'models' file if it doesn't exist
     if log.getEffectiveLevel() == logging.DEBUG:

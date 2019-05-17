@@ -1,4 +1,5 @@
-*.json
+raw_data.json
+data.json
 *.log
 __pycache__
 keyring.tar.gz

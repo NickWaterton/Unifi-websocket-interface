@@ -1,0 +1,303 @@
+{
+  "USW": {
+    "US6XG150": {
+      "ports": 4,
+      "poe": true,
+      "name": "Unifi Switch 6XG POE-150W",
+      "sfp": 0,
+      "sfp+": 2
+    },
+    "US24PL2": {
+      "ports": 24,
+      "poe": true,
+      "name": "Unifi Switch 24 L2 POE",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "US24P250": {
+      "ports": 24,
+      "poe": true,
+      "name": "Unifi Switch 24 POE-250W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "US16P150": {
+      "ports": 16,
+      "poe": true,
+      "name": "Unifi Switch 16 POE-150W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "US48P500": {
+      "ports": 48,
+      "poe": true,
+      "name": "Unifi Switch 48 POE-500W",
+      "sfp": 2,
+      "sfp+": 2
+    },
+    "S224250": {
+      "ports": 24,
+      "poe": true,
+      "name": "Unifi Switch 24 AT-250W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "S248750": {
+      "ports": 48,
+      "poe": true,
+      "name": "Unifi Switch 48 AT-750W",
+      "sfp": 2,
+      "sfp+": 2
+    },
+    "US24": {
+      "ports": 24,
+      "poe": false,
+      "name": "Unifi Switch 24",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "US8P150": {
+      "ports": 8,
+      "poe": true,
+      "name": "Unifi Switch 8 POE-150W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "USXG": {
+      "ports": 4,
+      "poe": false,
+      "name": "Unifi Switch 16XG",
+      "sfp": 0,
+      "sfp+": 12
+    },
+    "US8P60": {
+      "ports": 8,
+      "poe": true,
+      "name": "Unifi Switch 8 POE-60W",
+      "sfp": 0,
+      "sfp+": 0
+    },
+    "US48P750": {
+      "ports": 48,
+      "poe": true,
+      "name": "Unifi Switch 48 POE-750W",
+      "sfp": 2,
+      "sfp+": 2
+    },
+    "US24P500": {
+      "ports": 24,
+      "poe": true,
+      "name": "Unifi Switch 24 POE-500W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "S28150": {
+      "ports": 8,
+      "poe": true,
+      "name": "Unifi Switch 8 AT-150W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "S216150": {
+      "ports": 16,
+      "poe": true,
+      "name": "Unifi Switch 16 AT-150W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "US8": {
+      "ports": 8,
+      "poe": false,
+      "name": "Unifi Switch 8",
+      "sfp": 0,
+      "sfp+": 0
+    },
+    "S224500": {
+      "ports": 24,
+      "poe": true,
+      "name": "Unifi Switch 24 AT-500W",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "US48": {
+      "ports": 48,
+      "poe": false,
+      "name": "Unifi Switch 48",
+      "sfp": 2,
+      "sfp+": 2
+    },
+    "S248500": {
+      "ports": 48,
+      "poe": true,
+      "name": "Unifi Switch 48 AT-500W",
+      "sfp": 2,
+      "sfp+": 2
+    },
+    "US48PL2": {
+      "ports": 48,
+      "poe": true,
+      "name": "Unifi Switch 48 L2 POE",
+      "sfp": 2,
+      "sfp+": 2
+    },
+    "USC8": {
+      "ports": 8,
+      "poe": false,
+      "name": "Unifi Switch 8",
+      "sfp": 0,
+      "sfp+": 0
+    }
+  },
+  "UGW": {
+    "UGW3": {
+      "ports": 3,
+      "poe": false,
+      "name": "UniFi Security Gateway 3P",
+      "sfp": 0,
+      "sfp+": 0
+    },
+    "UGWXG": {
+      "ports": 1,
+      "poe": false,
+      "name": "UniFi Security Gateway XG-8",
+      "sfp": 0,
+      "sfp+": 8
+    },
+    "UGWHD4": {
+      "ports": 4,
+      "poe": false,
+      "name": "UniFi Security Gateway HD",
+      "sfp": 2,
+      "sfp+": 0
+    },
+    "UGW4": {
+      "ports": 4,
+      "poe": false,
+      "name": "UniFi Security Gateway 4P",
+      "sfp": 2,
+      "sfp+": 0
+    }
+  },
+  "UAP": {
+    "U7Ev2": {
+      "ports": 2,
+      "name": "UniFi AP-AC v2"
+    },
+    "U7IWP": {
+      "ports": 3,
+      "name": "UniFi AP-AC-In Wall Pro"
+    },
+    "U2HSR": {
+      "ports": 1,
+      "name": "UniFi AP-Outdoor+"
+    },
+    "U7EDU": {
+      "ports": 2,
+      "name": "UniFi AP-AC-EDU"
+    },
+    "U5O": {
+      "ports": 1,
+      "name": "UniFi AP-Outdoor 5G"
+    },
+    "U2L48": {
+      "ports": 1,
+      "name": "UniFi AP-LR"
+    },
+    "U2Lv2": {
+      "ports": 1,
+      "name": "UniFi AP-LR v2"
+    },
+    "U2Sv2": {
+      "ports": 1,
+      "name": "UniFi AP v2"
+    },
+    "U7MP": {
+      "ports": 2,
+      "name": "UniFi AP-AC-Mesh-Pro"
+    },
+    "p2N": {
+      "ports": 1,
+      "name": "PicoStation M2"
+    },
+    "U7PG2": {
+      "ports": 2,
+      "name": "UniFi AP-AC-Pro"
+    },
+    "U7O": {
+      "ports": 1,
+      "name": "UniFi AP-AC Outdoor"
+    },
+    "BZ2LR": {
+      "ports": 1,
+      "name": "UniFi AP-LR"
+    },
+    "U2IW": {
+      "ports": 2,
+      "name": "UniFi AP-In Wall"
+    },
+    "U2S48": {
+      "ports": 1,
+      "name": "UniFi AP"
+    },
+    "U7IW": {
+      "ports": 3,
+      "name": "UniFi AP-AC-In Wall"
+    },
+    "UCXG": {
+      "ports": 2,
+      "name": "UniFi AP-XG"
+    },
+    "UCMSH": {
+      "ports": 2,
+      "name": "UniFi AP-MeshXG"
+    },
+    "U7LR": {
+      "ports": 1,
+      "name": "UniFi AP-AC-LR"
+    },
+    "UXSDM": {
+      "ports": 2,
+      "name": "UniFi AP-BaseStationXG"
+    },
+    "U7SHD": {
+      "ports": 2,
+      "name": "UniFi AP-AC-SHD"
+    },
+    "U7NHD": {
+      "ports": 2,
+      "name": "UniFi AP-nanoHD"
+    },
+    "U7E": {
+      "ports": 1,
+      "name": "UniFi AP-AC"
+    },
+    "U7LT": {
+      "ports": 1,
+      "name": "UniFi AP-AC-Lite"
+    },
+    "BZ2": {
+      "ports": 1,
+      "name": "UniFi AP"
+    },
+    "U2M": {
+      "ports": 1,
+      "name": "UniFi AP-Mini"
+    },
+    "U2O": {
+      "ports": 1,
+      "name": "UniFi AP-Outdoor"
+    },
+    "U7MSH": {
+      "ports": 1,
+      "name": "UniFi AP-AC-Mesh"
+    },
+    "U7HD": {
+      "ports": 2,
+      "name": "UniFi AP-AC-HD"
+    },
+    "U7P": {
+      "ports": 1,
+      "name": "UniFi AP-Pro"
+    }
+  }
+}
