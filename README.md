@@ -71,9 +71,9 @@ __NOTE__ Pay attention to the bitmap fonts comment, it is required.
 
 Here is the help text for unifi.py:
 ```
-pi@raspberrypi:~/unifi $ ./unifi.py -h
+pi@raspberrypi:~/unifi $ ./unifi.py  -h
 usage: unifi.py [-h] [-p PORT] [-s] [-f FONT_SIZE] [-t] [-c CUSTOM] [-l LOG]
-                [-D] [-V]
+                [-D] [-li] [-S SIMULATE] [-V]
                 IP username password
 
 Unifi Status Screen
@@ -95,6 +95,10 @@ optional arguments:
                         use custom layout (default=None)
   -l LOG, --log LOG     log file. (default=None)
   -D, --debug           debug mode
+  -li, --list           list built in devices (for use in simulation)
+  -S SIMULATE, --simulate SIMULATE
+                        simulate device - pass device type as argument, eg
+                        US48P750 (default=None)
   -V, --version         show program's version number and exit
 ```
 
