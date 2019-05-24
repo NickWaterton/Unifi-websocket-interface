@@ -19,8 +19,9 @@
 # N.Waterton V 1.1.2 15th May 2019 - Added secondary port speed for aggregated ports
 # N.Waterton V 1.1.3 16th May 2019 - Made 'models' a loadable file
 # N.Waterton V 1.1.4 17th May 2019 - Added simulation mode
+# N.Waterton V 1.1.5 24th may 2019 - Minor fix to port enabled
 
-__VERSION__ = '1.1.4'
+__VERSION__ = '1.1.5'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -1496,7 +1497,7 @@ class NetworkDevice():
                 #log.info('updating port: %s, speed: %s ' % (port_number,port.get("speed",0)))
                 self.set_port_speed(port_number, port.get("speed",0))
                 self.set_port_power(port_number, port.get('poe_power', '0'))
-                self.set_port_enabled(port_number, port.get("enable", port["up"]))
+                self.set_port_enabled(port_number, port.get("enable", port.get("up",False)))
          
                 if port.get("is_uplink",False):
                     #log.info('updating port as uplink : %s, name: %s ' % (port_number,'UP'))
@@ -1565,6 +1566,7 @@ class NetworkDevice():
 
         except KeyError as e:
             log.info('Update data: Key error: %s' % e)
+            log.info('Error in device %s, port: %s' % (self.data.get("name", 'Unknown'), port_number))
             self.set_device_enabled(self.data["state"])
             
         if self.data.get('simulated_device'):
