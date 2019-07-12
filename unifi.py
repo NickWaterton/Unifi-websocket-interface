@@ -20,8 +20,11 @@
 # N.Waterton V 1.1.3 16th May 2019 - Made 'models' a loadable file
 # N.Waterton V 1.1.4 17th May 2019 - Added simulation mode
 # N.Waterton V 1.1.5 24th may 2019 - Minor fix to port enabled
+# N Waterton V 1.2.0 11th July 2019 - Rework of database structure to allow new devices (UDM sort of added, but not fully integrated yet).
+#                                     removed "ports" from AP definitions as not needed.
+#                                     can now read unifi data directly to draw device.
 
-__VERSION__ = '1.1.5'
+__VERSION__ = '1.2.0'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -518,9 +521,11 @@ class UnifiApp(Grx.Application):
                 for device in devices:
                     device_id = device["device_id"]
                     if custom_device_id == device_id:
-                        log.info('%s(%s), x: %s, y: %s port_size: %s, text_lines: %s' % (device["name"], device_id, param[0], param[1], param[2], param[3]))
-                        self.text_lines[name] = param[3]
-                        self.create_devices(param[0], param[1], type, [device], param[2])
+                        #log.info("%s(%s), Param: %s" % (device["name"], device_id, param))
+                        if isinstance(param,tuple):
+                            log.info('%s(%s), x: %s, y: %s port_size: %s, text_lines: %s' % (device["name"], device_id, param[0], param[1], param[2], param[3]))
+                            self.text_lines[name] = param[3]
+                            self.create_devices(param[0], param[1], type, [device], param[2])
         
     def draw_all_devices(self, override=False):
         if not override:
@@ -997,6 +1002,7 @@ class NetworkDevice():
     '''
 
     models = {}     #NOTE models defined in 'models.json' will override anything defined here or in subclasses
+    new_models = {} #new type of models structure, loaded from models.json file
     
     updated = False #used to detect when new models have been loaded from file
     
@@ -1068,6 +1074,7 @@ class NetworkDevice():
         self.name = ''
         self.data = data
         self.model = model
+        self.num_ports = ports
         if not self.check_model():
             self.num_ports = ports
             self.sfp=SFP
@@ -1085,17 +1092,47 @@ class NetworkDevice():
         self.org_num_ports = self.num_ports
         self.total_ports = ports    #reported total number of ports including sfp ports
         
-        self.device_ports_width = 0
-        if self.num_ports > 0:
-            self.device_ports_width += self.num_ports//self.rows
+        if self.unifi_data and self.unifi_data.get('ports') and self.model != 'UGWXG':    #special handling for UGWXG because it's weird
+            #use unifi port data to draw device if available
+            standard, sfp, sfp_plus = self.extract_ports_list(self.unifi_data['ports'])
+            self.org_num_ports = self.num_ports = len(standard)
+            if self.type == 'uap':
+                #UAP's don't normally have ports data in the database, except In-Wall devices, which miss out the uplink port (so add it back in)
+                self.num_ports += 1
+            self.sfp = len(sfp)
+            self.sfp_plus = len(sfp_plus)
+            self.total_ports = self.num_ports + self.sfp + self.sfp_plus
             
-        if self.sfp > 0:
-            self.device_ports_width += self.sfp//self.sfp_rows
-            self.sfp_offset = 10
+            log.info('Updated number of ports from Unifi Data: standard: %s, sfp: %s, sfp+: %s, Total: %s' % (standard, sfp, sfp_plus, self.total_ports))
             
-        if self.sfp_plus > 0:
-            self.device_ports_width += self.sfp_plus//self.sfp_plus_rows
+        if self.unifi_data and self.unifi_data.get('diagram') and self.model != 'UGWXG':    #special handling for UGWXG because it's weird
+            #use the diagram is there is one to figure out overall size
+            diagram = self.unifi_data["diagram"]
+            self.max_rows = self.rows = self.sfp_rows = self.sfp_plus_rows = len(diagram)
+            log.info('Updated number of rows from Unifi Data Diagram, new value: %s rows' % self.rows)
+            #log.info('DEVICE Diagram: %s' % (json.dumps(diagram, indent=2)))
+            layout = self.decode_layout(diagram)
+            max_ports_in_row = 0
+            for row, ports in layout.items():
+                real_ports = [x for x in ports if x != -1]
+                max_ports_in_row = max(max_ports_in_row, len(real_ports))  
+            
+            self.device_ports_width = max_ports_in_row
             self.sfp_offset = 10
+
+        else:
+            #default symmetrical device
+            self.device_ports_width = 0
+            if self.num_ports > 0:
+                self.device_ports_width += self.num_ports//self.rows
+                
+            if self.sfp > 0:
+                self.device_ports_width += self.sfp//self.sfp_rows
+                self.sfp_offset = 10
+                
+            if self.sfp_plus > 0:
+                self.device_ports_width += self.sfp_plus//self.sfp_plus_rows
+                self.sfp_offset = 10
            
         if self.port_width > 100 and self.num_ports == 1:
             #if we only have 1 large port increase overall width
@@ -1106,8 +1143,8 @@ class NetworkDevice():
     def init_rows(self, rows=1):
         if self.num_ports + self.sfp + self.sfp_plus != self.total_ports:
             log.info('WARNING: number of ports configured: %d, does not match number of ports reported: %d' % (self.num_ports, self.total_ports))
-    
-        self.rows = rows
+            
+        self.rows = rows    
         if self.x is None:
             self.x = max(0, Grx.get_width()//2 - (self.device_ports_width * (self.port_width+self.h_spacing) + self.sfp_offset+(2*self.x_offset))//2)
         if self.x < 0:  #auto position x from right edge
@@ -1200,14 +1237,17 @@ class NetworkDevice():
                                         text_object.get_h_align(), text_object.get_v_align())
                                         
     def check_model(self):
+        log.info('LOOKING UP model: %s in database' % (self.model))
+        self.unifi_data = None
         if self.model in self.models.keys():
             model = self.models[self.model]
             self.description =  model['name']
-            if isinstance(model['ports'], dict):
+            self.unifi_data = model.get('unifi', None)  #get unifi data (extracted from controller) if it exists in database
+            if isinstance(model.get('ports'), dict):
                 self.num_ports = model['ports']['number']
                 self.rows = model['ports']['rows']
             else:
-                self.num_ports = model['ports']
+                #self.num_ports = model['ports']    #don't really need this for AP's as we can figure it out
                 self.rows = 1
             self.poe =  model.get('poe', False)
             if isinstance(model.get('sfp'), dict):
@@ -1222,7 +1262,7 @@ class NetworkDevice():
             else:
                 self.sfp_plus = 0
                 self.sfp_plus_rows = 0
-            self.order = model.get('order', [0,2,1])
+            self.order = model.get('order', [0,2,1])    #order is 0=standard, 2=sfp+, 1=sfp
             self.max_rows = max(self.rows,self.sfp_rows,self.sfp_plus_rows)
             log.info('FOUND model: %s in database as %s' % (self.model, self.description))
             return True
@@ -1230,6 +1270,53 @@ class NetworkDevice():
             self.description = self.name
             log.info('model: %s NOT FOUND in database, guessing parameters' % self.model)
             return False
+            
+    def extract_ports_list(self,ports):
+        '''
+        returns ports list from unifi data as tuple of lists of port number ints
+        eg ([0,1,2,3], [4,5],[])
+        (standard []. sfp[], sfp_plus[])
+        NOTE, USG's start at port 0, but switches start at port 1.
+        '''
+        standard = []
+        sfp = []
+        sfp_plus = []
+        if isinstance(ports, (list, dict)):
+            standard = [x for x in range(len(ports))]
+        if ports.get('standard'):
+            standard = self.ports_list_decode(ports['standard'])
+        if ports.get('sfp'):
+            sfp = self.ports_list_decode(ports['sfp'])
+        if ports.get('plus'):
+            sfp_plus = self.ports_list_decode(ports['plus'])
+
+        return standard, sfp, sfp_plus
+        
+    def ports_list_decode(self,ports):
+        ports_list = []
+        if isinstance(ports, int):
+            ports_list = [x for x in range(1,ports+1,1)]
+        if isinstance(ports, list):
+            ports_list = ports
+        if isinstance(ports, str):
+            #log.info('Ports is a string: %s' % ports)
+            ports_string_list = ports.split('-')
+            ports_list = [x for x in range(int(ports_string_list[0]),int(ports_string_list[-1])+1,1)] 
+            
+        return ports_list
+        
+    def decode_layout(self,layout):
+        diagram = OrderedDict()
+        for row, port in enumerate(layout):
+            ports = port.split(' ')
+            diagram[row] = []
+            for index, p in enumerate(ports):
+                if row > 0:
+                    if diagram[row-1][index] == -1 and p.isdigit():
+                        diagram[row-1][index] = -2  #set port as empty port space, not separator
+                diagram[row].append(int(p) if p.isdigit() else -1)
+                                
+        return diagram
         
     def draw_device(self):
         if self.draw_outline(): #if true, ports already exist, so just draw outline
@@ -1241,31 +1328,85 @@ class NetworkDevice():
         x = self.port_x-self.port_width-self.h_spacing
         y = self.port_y #unused at the moment
         num_ports = 0 #port numbering starts at (plus 1)
-        self.sfp_offset = 0
         spacing = 0
         
-        for count, port_type in enumerate(self.order):
-            if port_type == 0:
-                x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.num_ports, self.rows, 0)
+        if self.unifi_data and self.unifi_data.get("diagram") and self.model != 'UGWXG':    #special handling for UGWXG because it's weird
+            #use unifi data to draw device if available
+            standard, sfp, sfp_plus = self.extract_ports_list(self.unifi_data['ports'])
+            log.info('UNIFI PORTS: standard: %s, sfp: %s, sfp+: %s' % (standard, sfp, sfp_plus))
+            diagram = self.unifi_data["diagram"]
+            log.info('DEVICE Diagram: %s' % (json.dumps(diagram, indent=2)))
+            layout = self.decode_layout(diagram)
+            log.info('DIAGRAM port layout is %s' % layout)
+            #figure out min port number, because they don't match up in the Unifi scheme
+            #max_port = max([max(x) for x in layout.values()])
+            self.min_port = min([min(filter(lambda a: a >= 0, x)) for x in layout.values()])
+            min_in_ports = min(standard+sfp+sfp_plus) # UGW start at port 0, Switches etc start at 1, AP's don't have port lists..
+            port_offset =  self.min_port - min_in_ports #always start ports at 1 (avoid 0/1 confusion)
+            log.info('self.min_port: %s, min_in_ports: %s, port offset: %s, sfp_offset: %s' % (self.min_port, min_in_ports, port_offset, self.sfp_offset))
+            
+            for row, ports in layout.items():
+                column = 0
+                sfp_offset_enable = False
+                prev_port_type = None
+                for port in ports:
+                    if port == -2:  #spacer port, add column, but don't draw port
+                        column+=1
+                        continue
+                    elif port-port_offset in standard:
+                        port_type = 0
+                    elif port-port_offset in sfp:
+                        port_type = 1
+                    elif port-port_offset in sfp_plus:
+                        port_type = 2
+                    else:
+                        port_type = -1  #probably -1, ie delimiter between different port types, so don't increment column if port type changes (port types less than 0 are not drawn)
+                        
+                    log.info('PORT values from DIAGRAM: row: %s, column: %s, port: %s, port-type: %s' % (row, column, port, port_type))    
+                    if prev_port_type is not None and prev_port_type != port_type:
+                        sfp_offset_enable = True
+                        if prev_port_type == -1:
+                            column -=1
+                    prev_port_type = port_type
+                    self.draw_port_from_diagram(row, column, port, sfp_offset_enable, port_type)
+                    column+=1
+            
+        else:
+            #use standard layout
+            self.sfp_offset = 0
+            for count, port_type in enumerate(self.order):
+                if port_type == 0:
+                    #draw standard port
+                    x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.num_ports, self.rows, 0)
+                        
+                if port_type == 1:
+                    #draw sfp ports
+                    x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.sfp, self.sfp_rows, 1)   
+                        
+                if port_type == 2:
+                    #draw sfp+ ports
+                    x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.sfp_plus, self.sfp_plus_rows, 2)
                     
-            if port_type == 1:
-                #draw sfp ports
-                x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.sfp, self.sfp_rows, 1)   
-                    
-            if port_type == 2:
-                #draw sfp+ ports
-                x, num_ports, ports_drawn = self.draw_port(x, y, num_ports, self.sfp_plus, self.sfp_plus_rows, 2)
-                
-            if ports_drawn:
-                spacing+=1     
-            if spacing == 1:
-                self.sfp_offset = 10
-            else:
-                self.sfp_offset = 0
+                if ports_drawn:
+                    spacing+=1     
+                if spacing == 1:
+                    self.sfp_offset = 10
+                else:
+                    self.sfp_offset = 0
             
         if self.zoomed:
             self.draw_extra_data()
         self.new = True   #indicate this is a newly created device (so we don't immediately redraw...)
+        
+    def draw_port_from_diagram(self, row, column, port, sfp_offset_enable, port_type):
+        if port_type < 0: return
+        sfp_offset = self.sfp_offset if sfp_offset_enable else 0
+        x = self.port_x + sfp_offset + (self.port_width+self.h_spacing) * column
+        y = self.port_y + (self.v_spacing + self.port_height) * row
+        if self.min_port == 0:  #UGW's start port numbering at 0, but we number from 1
+            port +=1
+        log.info('DRAWING port from DIAGRAM: row: %s, column: %s, x: %s, y %s, port: %s, type: %s, sfp_offset_enable: %s' % (row, column,x,y,port,port_type, sfp_offset_enable))
+        self.ports[port] = NetworkPort(x, y, port, port_type=port_type, POE=self.poe if port_type==0 else False, port_width=self.port_width, port_height=self.port_height, initial_data=self.initial_port_data.get(port, {}), parent=self)
         
     def draw_port(self, x, y, num, ports, rows, port_type):
         if ports == 0:
@@ -1472,6 +1613,7 @@ class NetworkDevice():
         total_power = 0.0
         downlinks_list = []
         self.radio_info = ''
+        port_number = None
         try:
             self.set_device_name(self.data.get("name", ''))
             self.set_device_enabled(self.data["state"])
@@ -1879,7 +2021,7 @@ class USG(NetworkDevice):
         return text
         
 class UAP(NetworkDevice):
-
+    '''
     models = {  'BZ2'  : {'ports':1, 'name': 'UniFi AP'},
                 'BZ2LR'  : {'ports':1, 'name': 'UniFi AP-LR'},
                 'U2HSR'  : {'ports':1, 'name': 'UniFi AP-Outdoor+'},
@@ -1911,6 +2053,38 @@ class UAP(NetworkDevice):
                 'U7PG2'  : {'ports':2, 'name': 'UniFi AP-AC-Pro'},
                 'p2N'  : {'ports':1, 'name': 'PicoStation M2'},
              }
+    '''
+    models = {  'BZ2'  : {'name': 'UniFi AP'},
+                'BZ2LR'  : {'name': 'UniFi AP-LR'},
+                'U2HSR'  : {'name': 'UniFi AP-Outdoor+'},
+                'U2IW'  : {'name': 'UniFi AP-In Wall'},
+                'U2L48'  : {'name': 'UniFi AP-LR'},
+                'U2Lv2'  : {'name': 'UniFi AP-LR v2'},
+                'U2M'  : {'name': 'UniFi AP-Mini'},
+                'U2O'  : {'name': 'UniFi AP-Outdoor'},
+                'U2S48'  : {'name': 'UniFi AP'},
+                'U2Sv2'  : {'name': 'UniFi AP v2'},
+                'U5O'  : {'name': 'UniFi AP-Outdoor 5G'},
+                'U7E'  : {'name': 'UniFi AP-AC'},
+                'U7EDU'  : {'name': 'UniFi AP-AC-EDU'},
+                'U7Ev2'  : {'name': 'UniFi AP-AC v2'},
+                'U7HD'  : {'name': 'UniFi AP-AC-HD'},
+                'U7SHD'  : {'name': 'UniFi AP-AC-SHD'},
+                'U7NHD'  : {'name': 'UniFi AP-nanoHD'},
+                'UCXG'  : {'name': 'UniFi AP-XG'},
+                'UXSDM'  : {'name': 'UniFi AP-BaseStationXG'},
+                'UCMSH'  : {'name': 'UniFi AP-MeshXG'},
+                'U7IW'  : {'name': 'UniFi AP-AC-In Wall'},
+                'U7IWP'  : {'name': 'UniFi AP-AC-In Wall Pro'},
+                'U7MP'  : {'name': 'UniFi AP-AC-Mesh-Pro'},
+                'U7LR'  : {'name': 'UniFi AP-AC-LR'},
+                'U7LT'  : {'name': 'UniFi AP-AC-Lite'},
+                'U7O'  : {'name': 'UniFi AP-AC Outdoor'},
+                'U7P'  : {'name': 'UniFi AP-Pro'},
+                'U7MSH'  : {'name': 'UniFi AP-AC-Mesh'},
+                'U7PG2'  : {'name': 'UniFi AP-AC-Pro'},
+                'p2N'  : {'name': 'PicoStation M2'},
+            }
              
     type='uap'  #AP type
 
@@ -2030,7 +2204,7 @@ def simulate_device(device, num=None):
     elif device in UAP.models.keys():
         data['type'] = 'uap'
     else:
-        log.warn('device %s not found in database, please add it to devices.json (use -D to create models.json file)' % device)
+        log.warn('device %s not found in database, please add it to devices.json (use get_devices.py to update devices.json, or edit by hand)' % device)
         sys.exit(1)
     return data
     
@@ -2088,27 +2262,30 @@ def main():
     if arg.list:
         list_devices()
         sys.exit(0)
+        
+    #generates a base 'models' file if it doesn't exist
+    #if log.getEffectiveLevel() == logging.DEBUG:
+    if not os.path.isfile('models.json'):
+        with open('models.json', 'w') as f:
+            models = {'USW':NetworkSwitch.models,
+                      'UGW':USG.models,
+                      'UAP':UAP.models,
+                      'UDM': {}}
+            f.write(json.dumps(models, indent=2))
     
     #simulate a device for testing
     if arg.simulate:
         arg.custom = None
         device = arg.simulate
         arg.simulate = []
+        NetworkSwitch.load_models()
+        USG.load_models()
+        UAP.load_models()
         if device in UAP.models.keys():
             for i in range(5):
                 arg.simulate.append(simulate_device(device, i))
         else:
             arg.simulate.append(simulate_device(device))
-             
-
-    #generates a base 'models' file if it doesn't exist
-    if log.getEffectiveLevel() == logging.DEBUG:
-        if not os.path.isfile('models.json'):
-            with open('models.json', 'w') as f:
-                models = {'USW':NetworkSwitch.models,
-                          'UGW':USG.models,
-                          'UAP':UAP.models}
-                f.write(json.dumps(models, indent=2))
 
     GLib.set_prgname('unifi.py')
     GLib.set_application_name('Unifi Status Screen')
