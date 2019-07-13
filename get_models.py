@@ -3,6 +3,7 @@
 
 #extract models info from unifi javascript
 # N Waterton 4th July 2019 V1.0: initial release
+# N Waterton 13th July 2019 V1.0.2 minor fixes.
 
 import time, os, sys, json, re
 from datetime import timedelta
@@ -13,7 +14,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 supported_devices=['UGW','USW','UAP','UDM']
 
-__VERSION__ = __version__ = '1.0.1'
+__VERSION__ = __version__ = '1.0.2'
 
 class progress_bar():
     '''
@@ -193,8 +194,6 @@ def get_summary(data):
 def update_models(file, data):
     if os.path.exists(file):
         log.warn('Updating file: %s, press ^C if you want to exit!' % file)
-        from shutil import copyfile
-        copyfile(file, file+'.org')
         with open(file) as f:
             models = json.loads(f.read(), object_pairs_hook=OrderedDict)
             
@@ -323,6 +322,9 @@ def update_models(file, data):
         log.debug('The following data will be written to the database: %s' % pprint(all_models))
         log.info('total devices: %s' % get_summary(all_models))
         if query_yes_no("Do you want to overwrite the %s file?" % file, None):
+            #backup original file
+            from shutil import copyfile
+            copyfile(file, file+'.org')
             #write models file out
             with open(file, 'w') as f:
                 f.write(pprint(all_models))
@@ -466,13 +468,13 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='extract model info from Unifi')
     parser.add_argument('-f','--files', action="store", default='/usr/lib/unifi', help='unifi files base location (default: /usr/lib/unifi)')
-    parser.add_argument('-u','--url', action="store", default=None, help='unifi url base location eg https://192.168.1.1:8443 (default; None)')
-    parser.add_argument('-up','--update', action="store", default=None, help='models file to update eg models.json (default; None)')
-    parser.add_argument('-o','--out', action="store", default='models_tmp.json', help='output file name (default; models_tmp.json')
-    parser.add_argument('-p','--pattern', action="store", default='U7HD', help='pattern to search for (default; U7HD')
-    parser.add_argument('-a','--all', action='store_true', help='get all matches (not just first) default: False', default = False)
-    parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
-    parser.add_argument('-d','--dryrun', action='store_true', help='dry run (no file written)', default = False)
+    parser.add_argument('-u','--url', action="store", default=None, help='unifi url base location eg https://192.168.1.1:8443 (default: None)')
+    parser.add_argument('-up','--update', action="store", default=None, help='models file to update eg models.json (default: None)')
+    parser.add_argument('-o','--out', action="store", default='models_tmp.json', help='output file name (default: models_tmp.json)')
+    parser.add_argument('-p','--pattern', action="store", default='U7HD', help='pattern to search for (default; U7HD)')
+    parser.add_argument('-a','--all', action='store_true', help='get all matches (not just first) default: False)', default = False)
+    parser.add_argument('-l','--log', action="store",default="None", help='log file. (default: None)')
+    #parser.add_argument('-d','--dryrun', action='store_true', help='dry run (no file written)', default = False)
     parser.add_argument('-D','--debug', action='store_true', help='debug mode', default = False)
     parser.add_argument('-V','--version', action='version',version='%(prog)s {version}'.format(version=__VERSION__))
 

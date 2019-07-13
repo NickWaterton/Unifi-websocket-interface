@@ -139,8 +139,14 @@ This will automatically start the monitor on boot if the pi is set to auto login
 If you log in via SSH, the monitor is not started.
 
 ### models.json file
-The `models.json` file contains values for every uniFi device, and overrides those built into uvifi.py. You can edit it manually (to tweak values i may have got wrong), or you can update it semi-automatically using a utility included here `get_models.py`
+The `models.json` file contains values for every uniFi device, and overrides those built into `unifi.py`. You can edit it manually (to tweak values i may have got wrong), or you can update it semi-automatically using a utility included here `get_models.py`
 If you want to re-create the models.json file from scratch, just delete it, and it will be recreated from scratch when you run `unifi.py` (all your changes will be lost).
+
+The `models.json` file ust be in the same directory as the `unifi.py` program, and you cannot change the name. if the file does not exist, or is renames, it will be recreated when `unifi.py` is run, but will only have basic information in it. Some devices, especially new devices may not display properly in this case.
+
+The default `models.json` file supplied has all the UniFi controller data already added to it (this is a recommended option in `get_models.py`). If you recreate from scratch (as described above), this data will be lost. It can be re-added by running `get_models.py` as described below.
+
+I strongly suggest making a backup of the `models.json` file before doing anything to it.
 
 ## get_models.py
 This is a utility program to populate the `models.json` file with unifi devices information. the `models.json` file must exist first! See above.
@@ -162,7 +168,7 @@ Here is the help text for get_models.py:
 ```
 pi@raspberrypi:~/unifi $ ./get_models.py -h
 usage: get_models.py [-h] [-f FILES] [-u URL] [-up UPDATE] [-o OUT]
-                     [-p PATTERN] [-a] [-l LOG] [-d] [-D] [-V]
+                     [-p PATTERN] [-a] [-l LOG] [-D] [-V]
 
 extract model info from Unifi
 
@@ -171,15 +177,14 @@ optional arguments:
   -f FILES, --files FILES
                         unifi files base location (default: /usr/lib/unifi)
   -u URL, --url URL     unifi url base location eg https://192.168.1.1:8443
-                        (default; None)
+                        (default: None)
   -up UPDATE, --update UPDATE
-                        models file to update eg models.json (default; None)
-  -o OUT, --out OUT     output file name (default; models_tmp.json
+                        models file to update eg models.json (default: None)
+  -o OUT, --out OUT     output file name (default: models_tmp.json)
   -p PATTERN, --pattern PATTERN
-                        pattern to search for (default; U7HD
-  -a, --all             get all matches (not just first) default: False
-  -l LOG, --log LOG     log file. (default=None)
-  -d, --dryrun          dry run (no file written)
+                        pattern to search for (default; U7HD)
+  -a, --all             get all matches (not just first) default: False)
+  -l LOG, --log LOG     log file. (default: None)
   -D, --debug           debug mode
   -V, --version         show program's version number and exit
 ```
@@ -203,9 +208,9 @@ This adds the full data from the controller download to the `models.json` databa
 
 The supplied `models.json` file has all devices and unifi data in it (including beta devices) as of July 2019 (Controller Version 5.11.31).
 
-Finally save the updated file `Do you want to overwrite the models.json file?`, there is no default answer, you have to enter `y` to update the file. The previos models.json file will be saved as a backup you can restore in case anything goes wrong.
+Finally save the updated file `Do you want to overwrite the models.json file?`, there is no default answer, you have to enter `y` to update the file. The previos `models.json` file will be saved as a backup file called `models.json.org` you can restore in case anything goes wrong.
 
-When you have updaded the `models.json` file, start (or restart) `unifi.py`, and it will load the new database. Any new devices should now be displayed properly...
+When you have updated the `models.json` file, start (or restart) `unifi.py`, and it will load the new database. Any new devices should now be displayed properly...
 
 This utility is a WIP, so it might be a bit buggy. Works on my systems.
 
