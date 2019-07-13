@@ -183,10 +183,14 @@ optional arguments:
   -D, --debug           debug mode
   -V, --version         show program's version number and exit
 ```
-The default action is to try to retrieve model information from the controller files on your computer. I don't recommend this. the best way to use it, is to run it as follows:
+The default action is to try to retrieve model information from the controller files on your computer. I don't recommend this, the best way to use it, is to run it as follows:
+
 `./get_models.py -u https://192.168.x.x:8443 -up models.json`
+
 Where `192.168.x.x:8443` is the ip address and port of your UniFi controller (no login or password required).
+
 This will retrieve the javascript from your controller, extract the model information from it, ask you some easy questions, and finally update the `models.json` file.
+
 It takes a while to retrieve the javascript, as it's huge. If you want to run it multiple times without downloading the javascript all the time, add the `-D` option, it will be more verbose, but it will store the javascript locally in a temporary directory and doesn't delete it. The next time you run with the `-D` option, the local files are loaded, so it's fast. Run without the `-D` if you want to download again (new controller release or something).
 
 When new devices are found in the download, you need to answer the questions, the defaults are usually correct - **BUT read them carefully - they may not be!** if you make a mistake, just hit `^C` and run again.
@@ -195,10 +199,15 @@ One crucial question is:
 ```
 Do you want to add the full Unifi data to the database (recommended)?
 ```
-This adds the full data from the controller download to the models.json database. When you do this, it overrides all the answers you just gave, and allows`unifi.py` to read the port layout correctly from the controller configuration (so the ports on the devices are drawn with the correct spacing). This is a good thing!
-Finally save the updated file `Do you want to overwrite the models.json file?`, there is no default answer, you have to enter `y` to update the file.
+This adds the full data from the controller download to the `models.json` database. When you do this, it overrides all the default entries you just gave, and allows`unifi.py` to read the port layout correctly from the controller configuration (so the ports on the devices are drawn with the correct spacing). This is a good thing!
 
-When you have updaded the `models.json` file, start (or restart) `unifi.py`, and it will load the new database. Any new devices should not be displayed properly...
+The supplied `models.json` file has all devices and unifi data in it (including beta devices) as of July 2019 (Controller Version 5.11.31).
+
+Finally save the updated file `Do you want to overwrite the models.json file?`, there is no default answer, you have to enter `y` to update the file. The previos models.json file will be saved as a backup you can restore in case anything goes wrong.
+
+When you have updaded the `models.json` file, start (or restart) `unifi.py`, and it will load the new database. Any new devices should now be displayed properly...
+
+This utility is a WIP, so it might be a bit buggy. Works on my systems.
 
 ## controller.py
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
