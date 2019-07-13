@@ -142,10 +142,10 @@ If you log in via SSH, the monitor is not started.
 The `models.json` file contains values for every uniFi device, and overrides those built into uvifi.py. You can edit it manually (to tweak values i may have got wrong), or you can update it semi-automatically using a utility included here `get_models.py`
 If you want to re-create the models.json file from scratch, just delete it, and it will be recreated from scratch when you run `unifi.py` (all your changes will be lost).
 
-##get_models.py
+## get_models.py
 This is a utility program to populate the `models.json` file with unifi devices information. the `models.json` file must exist first! See above.
 
-###Dependancies
+### Dependancies
 You need to install the following modules:
 * hjson
 * bs4
@@ -153,7 +153,7 @@ ie
 `pip3 install hjson`
 `pip3 install bs4`
 
-###Usage
+### Usage
 
 Here is the help text for get_models.py:
 ```
