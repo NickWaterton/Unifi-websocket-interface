@@ -147,10 +147,12 @@ This is a utility program to populate the `models.json` file with unifi devices 
 
 ### Dependancies
 You need to install the following modules:
-* hjson
-* bs4
+- requests
+- hjson
+- bs4
 
 ie
+`pip3 install requests`
 `pip3 install hjson`
 `pip3 install bs4`
 
