@@ -23,8 +23,9 @@
 # N Waterton V 1.2.0 11th July 2019 - Rework of database structure to allow new devices (UDM sort of added, but not fully integrated yet).
 #                                     removed "ports" from AP definitions as not needed.
 #                                     can now read unifi data directly to draw device.
+# N Waterton V 1.2.1 29th july 2019 - Fixes for Flex 5 POE Switch.
 
-__VERSION__ = '1.2.0'
+__VERSION__ = '1.2.1'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -156,7 +157,7 @@ class UnifiApp(Grx.Application):
                         self.draw_devices =[id]
                         devices.pop(id) #force recreation of device with new size parameters
                         if device.type == 'usw':
-                            self.port_size=Grx.get_height()//8#55
+                            self.port_size=Grx.get_height()//2#22
                             self.text_lines['usw'] = 2
                         elif device.type == 'ugw':
                             self.port_size=Grx.get_height()//4#140
@@ -1105,6 +1106,10 @@ class NetworkDevice():
             
             log.info('Updated number of ports from Unifi Data: standard: %s, sfp: %s, sfp+: %s, Total: %s' % (standard, sfp, sfp_plus, self.total_ports))
             
+        if self.unifi_data and self.unifi_data.get("power"):
+                self.max_power = self.unifi_data["power"].get("capacity",0)
+                log.info('Updated Max POE Power from Unifi Data to: %dW' % self.max_power)
+            
         if self.unifi_data and self.unifi_data.get('diagram') and self.model != 'UGWXG':    #special handling for UGWXG because it's weird
             #use the diagram is there is one to figure out overall size
             diagram = self.unifi_data["diagram"]
@@ -1239,6 +1244,7 @@ class NetworkDevice():
     def check_model(self):
         log.info('LOOKING UP model: %s in database' % (self.model))
         self.unifi_data = None
+        self.max_power = 0
         if self.model in self.models.keys():
             model = self.models[self.model]
             self.description =  model['name']
@@ -1567,22 +1573,39 @@ class NetworkDevice():
             return
         self.text_override = False
         try:
-            if self.poe:
+            if self.poe and self.device_params['temp'] is not None:
                 text = '%-2d°C Fan:%-2d%% Pwr:%-2d%% Load:%-14s Mem:%-2d%%' % ( self.device_params['temp'], 
                                                                                 self.device_params['fan'], 
                                                                                 self.device_params['power'], 
                                                                                 self.device_params['load'], 
                                                                                 self.device_params['mem'])
-            else:
+            elif self.device_params['temp'] is not None:
                 text = '%-2d°C Fan:%-2d%% Load:%-14s Mem:%-2d%%' % ( self.device_params['temp'], 
                                                                      self.device_params['fan'], 
                                                                      self.device_params['load'], 
                                                                      self.device_params['mem'])
+            elif self.poe:
+                text = '%sPwr:%-2d%% Load:%-14s Mem:%-2d%%' % ( 'Supply:%sV ' % self.device_params['power_voltage'] if self.device_params['power_voltage'] is not None else '',
+                                                              self.device_params['power'], 
+                                                              self.device_params['load'], 
+                                                              self.device_params['mem'])
+            
+            else:
+                text = 'Load:%-14s Mem:%-2d%%' % ( self.device_params['load'], 
+                                                   self.device_params['mem'])
+                                                                     
             uptime = 'UP:%-16s' % self.device_params['uptime_text']
             text+= '%*s%s' % (self.box_width-len(text)-len(uptime)-1,'',uptime)
-            self.text = [text, 'IP: %s  MAC: %s FW_VER: %s Available: %s' % (self.ip,self.device_params['mac'],self.device_params['fw_ver'], self.device_params['upgrade'])]
+            
+            self.text = [text, 'IP: %s  MAC: %s FW_VER: %s%s' % (self.ip,self.device_params['mac'],self.device_params['fw_ver'], self.upgrade_text)]
         except KeyError:
             self.text = []
+    
+    @property    
+    def upgrade_text(self):
+        if self.device_params.get('upgrade'):
+            return ' -> %s' % self.device_params['upgrade']
+        return ''
         
     def update_metrics(self):
         if self.clean:
@@ -1689,15 +1712,20 @@ class NetworkDevice():
             else:
                 self.set_port_name(uplink_port, 'P-UP')
             self.set_downlink(uplink_port, 1)
-            self.set_port_enabled(uplink_port, port.get("enable", port["up"]))
+            #self.set_port_enabled(uplink_port, port.get("enable", port["up"])) #apparently only needed for AP's, so moved to AP class. Some switches mess this up
 
             self.update_from_data_device_specific()
             
             #log.info('mem: %s, total mem: %s' % (self.data['sys_stats'].get("mem_used", 0),self.data['sys_stats'].get("mem_total", 1)))
             mem_percent = self.data['sys_stats'].get("mem_used", 0)*100//max(1,self.data['sys_stats'].get("mem_total", 0))
+            max_power = self.data.get("total_max_power", 0)
+            if max_power > 0 and max_power != self.max_power:
+                self.max_power = max_power
+                log.info('Max POE power updated to %dW' % self.max_power)
             self.update_data(    temp=self.data.get("general_temperature", None),
-                                 fan=self.data.get("fan_level", None),
-                                 power=total_power*100//max(1,self.data.get("total_max_power", 0)),
+                                 power_voltage=self.data.get("power_source_voltage", None),
+                                 fan=self.data.get("fan_level", 0),
+                                 power=total_power*100//max(1,self.max_power),
                                  load=self.data['sys_stats'].get("loadavg_1", '-') + ','+self.data['sys_stats'].get("loadavg_5", '-')+ ','+self.data['sys_stats'].get("loadavg_15", '-'),
                                  mem=mem_percent,
                                  uptime=self.data.get("uptime", None),
@@ -1970,7 +1998,7 @@ class USG(NetworkDevice):
                        ]
             if self.y_lines_text > 6:
                 self.text.append('MAC: %s' % self.device_params['mac'])
-                self.text.append('FW_VER: %s Available: %s' % (self.device_params['fw_ver'], self.device_params['upgrade']))
+                self.text.append('FW_VER: %s%s' % (self.device_params['fw_ver'], self.upgrade_text))
             for name, ip  in self.ip.items():
                 self.text.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
         except KeyError:
@@ -2120,13 +2148,13 @@ class UAP(NetworkDevice):
             ip = 'IP:%s' % (self.ip)
             if len(ip) >= self.box_width:
                 ip = 'IP:%s' % (self.short_ip)
-                
+              
             self.text= ['%s' % description,
                         '%s' % (ip),
                         '%s' % (self.device_params['uptime_text'][:self.box_width-1]),
                         'Load:%-14s Mem:%-3d%%' % (self.device_params['load'], self.device_params['mem']),
                         'MAC: %s' % self.device_params['mac'],
-                        'FW_VER: %s (%s)' % (self.device_params['fw_ver'], self.device_params['upgrade']),
+                        'FW_VER: %s%s' % (self.device_params['fw_ver'], self.upgrade_text),
                         '%s' % self.device_params['radio_info']]
         except KeyError:
             self.text = []
@@ -2135,6 +2163,13 @@ class UAP(NetworkDevice):
         '''
         Override this with specific data for devices other than switches
         '''
+        #set uplink port
+        port = self.data.get("uplink")   #uplink is not there if not online
+        if port:
+            uplink_port = self.get_port_number(port)
+            self.set_port_enabled(uplink_port, port.get("enable", port["up"]))
+        
+        #set radio info
         self.radio_info = ''
         radio_table = self.data.get("radio_table", [])
         for radio in radio_table:
