@@ -24,8 +24,9 @@
 #                                     removed "ports" from AP definitions as not needed.
 #                                     can now read unifi data directly to draw device.
 # N Waterton V 1.2.1 29th july 2019 - Fixes for Flex 5 POE Switch.
+# N Waterton V 1.2.2 23 August 2019 - Add display of POE power and port name even if port is not used for data, if POE power consumption >0
 
-__VERSION__ = '1.2.1'
+__VERSION__ = '1.2.2'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -795,7 +796,8 @@ class NetworkPort():
 
         Grx.draw_text(str(self.port_number), self.x+self.port_width//2, self.y-self.text_height, port_number_text_opts)
         Grx.draw_filled_rounded_box(self.x, self.y, self.x+self.port_width, self.y+self.port_height, 3, color)
-        if color == self.black:
+        if color == self.black and float(self.power)==0:
+            log.info("POWER: %s" % self.power)
             port_color = self.white
             if not self.enabled:
                 port_color = self.red
