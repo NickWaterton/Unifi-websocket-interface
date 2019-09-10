@@ -767,6 +767,16 @@
           "eth3": "LAN",
           "eth4": "WAN"
         },
+        "radios": {
+          "na": {
+            "gain": 4,
+            "maxPower": 25
+          },
+          "ng": {
+            "gain": 3,
+            "maxPower": 20
+          }
+        },
         "subtypes": [
           "ugw",
           "usw",
@@ -831,13 +841,14 @@
           "ipsThroughput": "1 Gbps"
         },
         "diagram": [
-          "01 03 05 07 __ 10",
-          "02 04 06 08 09 11"
+          "01 03 05 07 __ __ 10",
+          "02 04 06 08 __ 09 11"
         ],
         "name": "UniFi Dream Machine Pro",
         "networkGroups": {
           "eth0": "LAN",
           "eth1": "LAN",
+          "eth10": "LAN",
           "eth2": "LAN",
           "eth3": "LAN",
           "eth4": "LAN",
@@ -845,20 +856,21 @@
           "eth6": "LAN",
           "eth7": "LAN",
           "eth8": "WAN",
-          "eth9": "WAN"
+          "eth9": "WAN2"
         },
         "ports": {
           "eth0": "LAN",
           "eth1": "LAN",
+          "eth10": "LAN",
           "eth2": "LAN",
           "eth3": "LAN",
           "eth4": "LAN",
           "eth5": "LAN",
           "eth6": "LAN",
           "eth7": "LAN",
-          "eth8": "WAN",
-          "eth9": "WAN",
-          "sfp": [
+          "eth8": "WAN1",
+          "eth9": "WAN2",
+          "plus": [
             10,
             11
           ],
@@ -919,6 +931,16 @@
           "eth3": "LAN",
           "eth4": "WAN"
         },
+        "radios": {
+          "na": {
+            "gain": 4,
+            "maxPower": 25
+          },
+          "ng": {
+            "gain": 3,
+            "maxPower": 20
+          }
+        },
         "subtypes": [
           "ugw",
           "usw",
@@ -955,13 +977,14 @@
           "ipsThroughput": "1 Gbps"
         },
         "diagram": [
-          "01 03 05 07 __ 10",
-          "02 04 06 08 09 11"
+          "01 03 05 07 __ __ 10",
+          "02 04 06 08 __ 09 11"
         ],
         "name": "UniFi Dream Machine Pro",
         "networkGroups": {
           "eth0": "LAN",
           "eth1": "LAN",
+          "eth10": "LAN",
           "eth2": "LAN",
           "eth3": "LAN",
           "eth4": "LAN",
@@ -969,20 +992,21 @@
           "eth6": "LAN",
           "eth7": "LAN",
           "eth8": "WAN",
-          "eth9": "WAN"
+          "eth9": "WAN2"
         },
         "ports": {
           "eth0": "LAN",
           "eth1": "LAN",
+          "eth10": "LAN",
           "eth2": "LAN",
           "eth3": "LAN",
           "eth4": "LAN",
           "eth5": "LAN",
           "eth6": "LAN",
           "eth7": "LAN",
-          "eth8": "WAN",
-          "eth9": "WAN",
-          "sfp": [
+          "eth8": "WAN1",
+          "eth9": "WAN2",
+          "plus": [
             10,
             11
           ],
@@ -1528,15 +1552,19 @@
       },
       "unifi": {
         "features": {
+          "fan": "simple",
           "poe": 1
         },
-        "name": "UniFi Switch 16 POE",
+        "name": "UniFi Switch 16 POE-150W",
         "ports": {
           "sfp": [
             17,
             18
           ],
           "standard": 16
+        },
+        "power": {
+          "capacity": 150
         },
         "type": "usw"
       }
@@ -1588,15 +1616,19 @@
       },
       "unifi": {
         "features": {
+          "fan": "alwayson",
           "poe": 1
         },
-        "name": "UniFi Switch 24 POE",
+        "name": "UniFi Switch 24 POE-250W",
         "ports": {
           "sfp": [
             25,
             26
           ],
           "standard": 24
+        },
+        "power": {
+          "capacity": 250
         },
         "type": "usw"
       }

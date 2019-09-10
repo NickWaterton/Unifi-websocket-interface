@@ -4,6 +4,7 @@
 #extract models info from unifi javascript
 # N Waterton 4th July 2019 V1.0: initial release
 # N Waterton 13th July 2019 V1.0.2 minor fixes.
+# N Waterton 10th Sep 2019 V1.0.3 minor fixes
 
 import time, os, sys, json, re
 from datetime import timedelta
@@ -14,7 +15,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 supported_devices=['UGW','USW','UAP','UDM']
 
-__VERSION__ = __version__ = '1.0.2'
+__VERSION__ = __version__ = '1.0.3'
 
 class progress_bar():
     '''
@@ -305,14 +306,15 @@ def update_models(file, data):
                     
         log.debug('The following new devices have been added: %s' % pprint(new_models))
         log.info('New devices: %s' % get_summary(new_models))
-        if not any([value for value in get_summary(new_models).values()]):
-            log.info('No New Models Found')
-            return
         all_models = OrderedDict()
         all_models.update(models)
-        if query_yes_no("Do you want to add them to the database?"):
-            all_models = merge_dicts(models, new_models)
-            log.info('database updated')
+        if not any([value for value in get_summary(new_models).values()]):
+            log.info('No New Models Found')
+            #return
+        else:
+            if query_yes_no("Do you want to add them to the database?"):
+                all_models = merge_dicts(models, new_models)
+                log.info('database updated')
         if query_yes_no("Do you want to add the full Unifi data to the database (recommended)?"):
             for type, devices in all_models.copy().items():
                 for device in devices:

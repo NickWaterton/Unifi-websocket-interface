@@ -797,7 +797,7 @@ class NetworkPort():
         Grx.draw_text(str(self.port_number), self.x+self.port_width//2, self.y-self.text_height, port_number_text_opts)
         Grx.draw_filled_rounded_box(self.x, self.y, self.x+self.port_width, self.y+self.port_height, 3, color)
         if color == self.black and float(self.power)==0:
-            log.info("POWER: %s" % self.power)
+            #log.info("POWER: %s" % self.power)
             port_color = self.white
             if not self.enabled:
                 port_color = self.red

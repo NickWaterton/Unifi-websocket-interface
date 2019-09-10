@@ -20,6 +20,8 @@
 #need to install websockets-client (pip install websocket-client)
 #or aiohttp (pip install aiohttp) - python 3 only!
 
+# N Waterton 10th September 2019 V1.1.2: added "sta:sync" message type found in controller 5.11.39
+
 from __future__ import print_function
 
 import json
@@ -35,18 +37,19 @@ from collections import OrderedDict
 import logging
 from logging.handlers import RotatingFileHandler
 
-__VERSION__ = '1.1.0'
+__VERSION__ = '1.1.2'
 
 log = logging.getLogger('Main')
 
 class UnifiClient(object):
 
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None):
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0):
         self.username = username
         self.password = password
         self.host = host
         self.port = port
         self.ssl_verify = ssl_verify
+        self.timeout = timeout
         
         self.url = 'https://' + self.host + ':' + str(port) + '/'
         self.login_url = self.url + 'api/login'
@@ -79,9 +82,9 @@ class UnifiClient(object):
         '''
         if sys.version_info[0] == 3 and sys.version_info[1] > 3:
             from unifi_client_3 import UnifiClient3 #has to be in separate module to prevent python2 syntax errors
-            UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues)
+            UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout)
         else:
-            UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues)
+            UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout)
         
     def update_unifi_data(self, data):
         '''
@@ -92,7 +95,7 @@ class UnifiClient(object):
         unifi_data = OrderedDict()
         
         meta = data['meta']
-        update_type = meta.get("message", "device:sync")   #"events", "device:sync", "device:update", "speed-test:update", "user:sync", possibly others
+        update_type = meta.get("message", "device:sync")   #"events", "device:sync", "device:update", "speed-test:update", "user:sync", "sta:sync", possibly others
         data_list = data['data']
         
         if update_type == "device:sync":
@@ -118,6 +121,10 @@ class UnifiClient(object):
         elif update_type == "speed-test:update":
             log.info('received speedtest: %s' % json.dumps(data, indent=2))
             #do something with speed tests here
+        elif update_type == "sta:sync":
+            log.info('received sta:sync: message')
+            log.debug('\n: %s' % json.dumps(data, indent=2))
+            #do something with station sync here
             
         else:
             log.warn('Unknown message type: %s, data: %s' % (update_type, json.dumps(data, indent=2)))
@@ -232,8 +239,8 @@ class UnifiClient2(UnifiClient):
     '''
     Python 2 websocket class
     '''
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None):
-        super(UnifiClient2, self).__init__(username, password, host, port, ssl_verify, q)
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0):
+        super(UnifiClient2, self).__init__(username, password, host, port, ssl_verify, q, timeout)
    
     def connect_websocket(self):
         t=threading.Thread(target=self.start_websocket)
@@ -269,10 +276,10 @@ class UnifiClient2(UnifiClient):
         try:
         
             # We Authenticate with one session to get a session ID and other validation cookies
-            r = session.post(self.login_url, json=json_request, verify=self.ssl_verify)
+            r = session.post(self.login_url, json=json_request, verify=self.ssl_verify, timeout=self.timeout)
             assert r.status_code == 200
 
-            r = session.get(self.initial_info_url, json=self.params, verify=self.ssl_verify)
+            r = session.get(self.initial_info_url, json=self.params, verify=self.ssl_verify, timeout=self.timeout)
             assert r.status_code == 200
 
             data = r.json()
@@ -310,8 +317,10 @@ class UnifiClient2(UnifiClient):
                 self.update_unifi_data(json.loads(msg))
             log.info('WS disconnected')
 
-        except AssertionError as e:
+        except (AssertionError, requests.ConnectionError, requests.Timeout) as e:
             log.error("Connection failed error: %s" % e)
+        except Exception as e:
+            log.exception("unknown exception: %s" % e)
                
         log.info('Exited')
         
