@@ -4,6 +4,8 @@ A Websocket client for Unifi Controller and an example RPi based display program
 ## unifi_client.py
 The websocket client is `unifi_client.py`
 
+**NEW** Updated for Unifi OS device (like the UDM Pro). If you specify the port as 443 it is assumed that the controller is a Unifi OS device.
+
 You can run it from the command line as an example, but mostly you would import it as a module.
 
 `unify_client.py` is designed for python 3.4 and above, tested under python 3.5, but includes support for python 2.
@@ -19,8 +21,8 @@ here is the help text:
 ```bash
 nick@proliant:~/Scripts/Unifi-websocket-interface$ ./unifi_client.py -h
 usage: unifi_client.py [-h] [-po UNIFI_PORT] [-s] [-b BROKER] [-p PORT]
-                       [-u USER] [-pw PASSWD] [-pt PUB_TOPIC] [-l LOG] [-D]
-                       [-V]
+                       [-u USER] [-uos UNIFI_OS] [-pw PASSWD] [-pt PUB_TOPIC]
+                       [-l LOG] [-D] [-V]
                        IP username password
 
 Unifi MQTT-WS Client and Data
@@ -39,6 +41,8 @@ optional arguments:
                         mqtt broker to publish sensor data to. (default=None)
   -p PORT, --port PORT  mqtt broker port (default=1883)
   -u USER, --user USER  mqtt broker username. (default=None)
+  -uos UNIFI_OS, --unifi_os UNIFI_OS
+                        UDM Pro connection (default=False)
   -pw PASSWD, --passwd PASSWD
                         mqtt broker password. (default=None)
   -pt PUB_TOPIC, --pub_topic PUB_TOPIC
@@ -46,6 +50,7 @@ optional arguments:
   -l LOG, --log LOG     log file. (default=None)
   -D, --debug           debug mode
   -V, --version         show program's version number and exit
+
 ```
 
 You have to supply an ip (or FQDN), username and password (your Unifi login credentials), and optionally the port number (default is 8443).
@@ -72,8 +77,8 @@ __NOTE__ Pay attention to the bitmap fonts comment, it is required.
 Here is the help text for unifi.py:
 ```
 pi@raspberrypi:~/unifi $ ./unifi.py  -h
-usage: unifi.py [-h] [-p PORT] [-s] [-f FONT_SIZE] [-t] [-c CUSTOM] [-l LOG]
-                [-D] [-li] [-S SIMULATE] [-V]
+usage: unifi.py [-h] [-p PORT] [-s] [-f FONT_SIZE] [-t] [-c CUSTOM] [-uos]
+                [-l LOG] [-D] [-li] [-S SIMULATE] [-V]
                 IP username password
 
 Unifi Status Screen
@@ -93,6 +98,8 @@ optional arguments:
                         false)
   -c CUSTOM, --custom CUSTOM
                         use custom layout (default=None)
+  -uos, --unifi_os      is controller on a Unifi OS system like UDM? default
+                        False
   -l LOG, --log LOG     log file. (default=None)
   -D, --debug           debug mode
   -li, --list           list built in devices (for use in simulation)

@@ -25,8 +25,9 @@
 #                                     can now read unifi data directly to draw device.
 # N Waterton V 1.2.1 29th july 2019 - Fixes for Flex 5 POE Switch.
 # N Waterton V 1.2.2 23 August 2019 - Add display of POE power and port name even if port is not used for data, if POE power consumption >0
+# N Waterton V 1.2.3 13th February    added basic support for UDM Pro
 
-__VERSION__ = '1.2.2'
+__VERSION__ = '1.2.3'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -435,7 +436,7 @@ class UnifiApp(Grx.Application):
     def get_unifi_data(self):
         simulate_update = True
         if not self.arg.simulate:
-            client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify)
+            client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify, unifi_os=arg.unifi_os)
         while not self.exit.value:
             try:
                 with self.update.get_lock():
@@ -2270,6 +2271,7 @@ def main():
     parser.add_argument('-f','--font_size', action="store", type=int, default=10, help='font size - controlls device size (default=10)')
     parser.add_argument('-t','--extra_text', action='store_true', help='Display Extra text in APs to fill screen (Default false)', default = False)
     parser.add_argument('-c','--custom', action="store", default=None, help='use custom layout (default=None)')
+    parser.add_argument('-uos','--unifi_os', action='store_true', help='is controller on a Unifi OS system like UDM? default False', default = False)
     parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
     parser.add_argument('-D','--debug', action='store_true', help='debug mode', default = False)
     parser.add_argument('-li','--list', action='store_true', help='list built in devices (for use in simulation)', default = False)

@@ -21,6 +21,7 @@
 #or aiohttp (pip install aiohttp) - python 3 only!
 
 # N Waterton 10th September 2019 V1.1.2: added "sta:sync" message type found in controller 5.11.39
+# N Waterton 13th February  2020 V 1.1.3: added basic support for UDM Pro
 
 from __future__ import print_function
 
@@ -37,25 +38,36 @@ from collections import OrderedDict
 import logging
 from logging.handlers import RotatingFileHandler
 
-__VERSION__ = '1.1.2'
+__VERSION__ = '1.1.3'
 
 log = logging.getLogger('Main')
 
 class UnifiClient(object):
 
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0):
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=False):
         self.username = username
         self.password = password
         self.host = host
         self.port = port
         self.ssl_verify = ssl_verify
         self.timeout = timeout
+        self.unifi_os = unifi_os
         
-        self.url = 'https://' + self.host + ':' + str(port) + '/'
-        self.login_url = self.url + 'api/login'
+        if self.port == 443:
+            self.unifi_os = True
+        
+        if unifi_os:
+            # do not use port for unifi os based devices (UDM)
+            self.url = 'https://{}/proxy/network/'.format(self.host)
+            self.login_url = 'https://{}/api/auth/login'.format(self.host)
+            self.ws_url= 'wss://{}/proxy/network/wss/s/default/events'.format(self.host)
+        else:
+            self.url = 'https://' + self.host + ':' + str(port) + '/'
+            self.ws_url= 'wss://{}:{}/wss/s/default/events'.format(self.host, self.port)
+            self.login_url = self.url + 'api/login'
         self.initial_info_url = self.url + 'api/s/default/stat/device'
         self.params = {'_depth': 4, 'test': 0}
-        self.ws_url= 'wss://{}:{}/wss/s/default/events'.format(self.host, self.port)
+        
         
         #dictionary for storing unifi data
         self.unifi_data = OrderedDict()
@@ -82,9 +94,9 @@ class UnifiClient(object):
         '''
         if sys.version_info[0] == 3 and sys.version_info[1] > 3:
             from unifi_client_3 import UnifiClient3 #has to be in separate module to prevent python2 syntax errors
-            UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout)
+            UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
         else:
-            UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout)
+            UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
         
     def update_unifi_data(self, data):
         '''
@@ -239,8 +251,8 @@ class UnifiClient2(UnifiClient):
     '''
     Python 2 websocket class
     '''
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0):
-        super(UnifiClient2, self).__init__(username, password, host, port, ssl_verify, q, timeout)
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=False):
+        super(UnifiClient2, self).__init__(username, password, host, port, ssl_verify, q, timeout, unifi_os)
    
     def connect_websocket(self):
         t=threading.Thread(target=self.start_websocket)
@@ -357,6 +369,7 @@ def main():
     parser.add_argument('-b','--broker', action="store", default=None, help='mqtt broker to publish sensor data to. (default=None)')
     parser.add_argument('-p','--port', action="store", type=int, default=1883, help='mqtt broker port (default=1883)')
     parser.add_argument('-u','--user', action="store", default=None, help='mqtt broker username. (default=None)')
+    parser.add_argument('-uos','--unifi_os', action="store", default=False, help='UDM Pro connection (default=False)')
     parser.add_argument('-pw','--passwd', action="store", default=None, help='mqtt broker password. (default=None)')
     parser.add_argument('-pt','--pub_topic', action="store",default='/unifi_data/', help='topic to publish unifi data to. (default=/unifi_data/)')
     parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
@@ -403,7 +416,7 @@ def main():
             mqttc.loop_start()
    
     
-        client = UnifiClient(arg.username, arg.password, arg.IP, arg.unifi_port, arg.ssl_verify)
+        client = UnifiClient(arg.username, arg.password, arg.IP, arg.unifi_port, arg.ssl_verify, unifi_os=arg.unifi_os)
 
         while True:
             data = client.devices()

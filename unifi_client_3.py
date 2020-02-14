@@ -42,8 +42,8 @@ class UnifiClient3(UnifiClient):
     '''
     Python 3 websocket class
     '''
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None):
-        super().__init__(username, password, host, port, ssl_verify, q)
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=False):
+        super().__init__(username, password, host, port, ssl_verify, q, timeout, unifi_os)
         
     def connect_websocket(self):
         t=threading.Thread(target=self.start_websocket)
@@ -84,37 +84,39 @@ class UnifiClient3(UnifiClient):
                        }
                        
         try:
-
+            
             async with aiohttp.ClientSession(cookie_jar=jar) as session:
                 async with session.post(
-                        self.login_url,json=json_request, ssl=self.ssl_verify) as response:
+                        self.login_url,json=json_request, ssl=self.ssl_verify, timeout=self.timeout) as response:
                         assert response.status == 200
                         json_response = await response.json()
                         log.debug('Received json response to login:')
                         log.debug(json.dumps(json_response, indent=2))
 
                 async with session.get(
-                        self.initial_info_url,json=self.params, ssl=self.ssl_verify) as response:
+                        self.initial_info_url,json=self.params, ssl=self.ssl_verify, timeout=self.timeout) as response:
                         assert response.status == 200
                         json_response = await response.json()
                         log.debug('Received json response to initial data:')
-                        log.debug(json.dumps(json_response, indent=2))
+                        #log.debug(json.dumps(json_response, indent=2))
                         self.update_unifi_data(json_response)
-
-                async with session.ws_connect(self.ws_url, ssl=self.ssl_verify) as ws:
+       
+                async with session.ws_connect(self.ws_url, ssl=self.ssl_verify, timeout=self.timeout) as ws:
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             log.debug('received: %s' % json.dumps(json.loads(msg.data),indent=2))
                             self.update_unifi_data(msg.json(loads=json.loads))
-                        elif msg.type == aiohttp.WSMsgType.CLOSED:
-                            log.info('WS closed')
+                        elif msg.type == aiohttp.WSMsgType.CLOSE:
+                            log.info('WS closed: %s' % msg.extra)
                             break
                         elif msg.type == aiohttp.WSMsgType.ERROR:
                             log.error('WS closed with Error')
                             break
                             
-        except AssertionError as e:
+        except (AssertionError, aiohttp.client_exceptions.ClientConnectorError) as e:
             log.error('failed to connect: %s' % e)
+        except Exception as e:
+            log.exception("unknown exception: %s" % e)
                
         log.info('Exited')    
         
