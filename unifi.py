@@ -165,6 +165,10 @@ class UnifiApp(Grx.Application):
                             self.port_size=Grx.get_height()//4#140
                             self.text_lines['ugw'] = 8
                             self.x_pos = None
+                        elif device.type == 'udm':
+                            self.port_size=Grx.get_height()//2#140
+                            self.text_lines['udm'] = 8
+                            self.x_pos = None
                         else:   #uap
                             self.port_size=Grx.get_height()//4#140
                             self.text_lines['uap'] = 7
@@ -225,6 +229,7 @@ class UnifiApp(Grx.Application):
         
         self.default_text_lines = { 'usw':1,
                                     'ugw':6,
+                                    'udm':3,
                                     'uap':3
                                   }
         self.text_lines = self.default_text_lines.copy()
@@ -550,10 +555,12 @@ class UnifiApp(Grx.Application):
                 switches.append(device)
             elif device["type"]=='ugw':
                 usgs.append(device)
+            elif device["type"]=='udm':
+                usgs.append(device)
             elif device["type"]=='uap':
                 uaps.append(device)
                     
-        log.info('number of usgs: %s, switches: %s, aps: %s' % (len(usgs),len(switches),len(uaps)))
+        log.info('number of usgs/udms: %s, switches: %s, aps: %s' % (len(usgs),len(switches),len(uaps)))
         
         if self.custom and not self.zoomed:
             #draw custom devices
@@ -632,6 +639,12 @@ class UnifiApp(Grx.Application):
                         #Vertical spacing of usg's increment next switch this many down (of course should only be one...)
                         last_y_pos = y = devices[id].device_bottom + self.text_height//2
                         log.info('USG right: %s' % devices[id].device_right)
+                    elif type == 'udm':
+                        log.info('creating udm: %s' % name)
+                        devices[id]=(UDM(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]))
+                        #Vertical spacing of udm's increment next switch this many down (of course should only be one...)
+                        last_y_pos = y = devices[id].device_bottom + self.text_height//2
+                        log.info('UDM right: %s' % devices[id].device_right)
                     elif type == 'uap':
                         #first run is always a dry run
                         #if self.arg.simulate:
@@ -2018,6 +2031,98 @@ class USG(NetworkDevice):
             if 'lan' in port["name"] or port_number > 1:
                 self.set_downlink(port_number, -1)    #set as downlink
                 
+    def extra_text(self):
+        '''
+        can override this for devices that aren't switches if you like
+        '''
+        text = []
+        data_table=[    "full_duplex",
+                        "gateways",
+                        "latency",
+                        "nameservers",
+                        "netmask",  
+                    ]
+        bytes_table = [ "rx_bytes",
+                        "rx_dropped",
+                        "rx_errors",
+                        "rx_multicast",
+                        "tx_bytes",
+                        "tx_dropped",
+                        "tx_errors",
+                      ]
+                    
+        text.append('--WAN')
+        if self.data.get("uplink"):
+            for key, value in sorted(self.data["uplink"].items()):
+                if key in data_table+bytes_table:
+                    if isinstance(value, list):
+                        for item in value:
+                            text.append('%-12s : %s' % (key, item))
+                    else:
+                        if key in bytes_table: 
+                            value = self.human_size(value)
+                        text.append('%-12s : %s' % (key, value))
+        return text
+        
+class UDM(NetworkDevice):
+
+    models = {  'UGW3'  : {'ports':{'number':3, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway 3P'},
+                'UGW4'	: {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':2, 'rows':1}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway 4P'},     #4 RJ45's and 2 side by side SFP+
+                'UGWHD4' : {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':2, 'rows':1}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway HD'},   #unknown for now
+                'UGWXG'	: {'ports':{'number':1, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':1}, 'sfp+':{'number':8, 'rows':2}, 'order': [2,0,1], 'name': 'UniFi Security Gateway XG-8'},   #8 SFP+ 4x2 and 1 RJ45 9lower)
+             }
+             
+    type='ugw'  #UDM (gateway) type
+
+    def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
+        self.load_models()
+        self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
+ 
+        self.init_rows(self.rows)
+        self.ip = OrderedDict() #USG has more than one ip address
+        self.update_from_data()
+        self.draw_device()
+   
+    def set_text(self, text=None): 
+        #override this with each devices metrics text
+        if text is not None:
+            self.text = text
+            self.clean = False
+            self.text_override = True
+            return
+        self.text_override = False
+        try:
+            self.text= [ 'Load:%-14s' % (self.device_params['load']),
+                         'Mem:%-3d%%' % self.device_params['mem'],
+                         'UP:%-16s' % (self.device_params['uptime_text']),
+                       ]
+
+            if self.y_lines_text > 6:
+                self.text.append('MAC: %s' % self.device_params['mac'])
+                self.text.append('FW_VER: %s%s' % (self.device_params['fw_ver'], self.upgrade_text))
+            for name, ip  in self.ip.items():
+                self.text.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
+        except KeyError:
+            self.text = []
+        
+    def update_from_data_device_specific(self):
+        '''
+        Override this with specific data for devices other than switches
+        '''
+        for port in self.data["port_table"]:
+            port_number = self.get_port_number(port)
+            if port["name"].lower() == 'port %s' % port_number:
+                if self.ports[port_number].is_downlink == -1:
+                    self.set_port_name(port_number, 'LAN')
+                elif self.ports[port_number].is_downlink == 1:
+                    self.set_port_name(port_number, 'WAN')
+                else:
+                    self.set_port_name(port_number, '')
+            #self.set_port_name(port_number, port["name"])
+            #self.set_ip(port.get("ip", ''),port["name"])
+            #if 'lan' in port["name"] or port_number > 1:
+            #    self.set_downlink(port_number, -1)    #set as downlink
+            
     def extra_text(self):
         '''
         can override this for devices that aren't switches if you like

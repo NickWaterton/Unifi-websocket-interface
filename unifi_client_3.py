@@ -98,7 +98,7 @@ class UnifiClient3(UnifiClient):
                         assert response.status == 200
                         json_response = await response.json()
                         log.debug('Received json response to initial data:')
-                        #log.debug(json.dumps(json_response, indent=2))
+                        log.debug(json.dumps(json_response, indent=2))
                         self.update_unifi_data(json_response)
        
                 async with session.ws_connect(self.ws_url, ssl=self.ssl_verify, timeout=self.timeout) as ws:
