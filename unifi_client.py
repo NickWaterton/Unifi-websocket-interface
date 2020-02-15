@@ -22,6 +22,7 @@
 
 # N Waterton 10th September 2019 V1.1.2: added "sta:sync" message type found in controller 5.11.39
 # N Waterton 13th February  2020 V 1.1.3: added basic support for UDM Pro
+# N Waterton 15th February  2020 V 1.1.4: added enhanced support for UDM Pro
 
 from __future__ import print_function
 
@@ -29,6 +30,7 @@ import json
 import sys
 import time
 import threading
+import requests
 try:
     from queue import Queue
 except ImportError:
@@ -38,13 +40,13 @@ from collections import OrderedDict
 import logging
 from logging.handlers import RotatingFileHandler
 
-__VERSION__ = '1.1.3'
+__VERSION__ = '1.1.4'
 
 log = logging.getLogger('Main')
 
 class UnifiClient(object):
 
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=False):
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=None):
         self.username = username
         self.password = password
         self.host = host
@@ -53,16 +55,16 @@ class UnifiClient(object):
         self.timeout = timeout
         self.unifi_os = unifi_os
         
-        if self.port == 443:
-            self.unifi_os = True
+        if self.unifi_os is None:
+            self.unifi_os = self.is_unifi_os()
         
         if unifi_os:
             # do not use port for unifi os based devices (UDM)
             self.url = 'https://{}/proxy/network/'.format(self.host)
-            self.login_url = 'https://{}/api/auth/login'.format(self.host)
             self.ws_url= 'wss://{}/proxy/network/wss/s/default/events'.format(self.host)
+            self.login_url = 'https://{}/api/auth/login'.format(self.host)
         else:
-            self.url = 'https://' + self.host + ':' + str(port) + '/'
+            self.url = 'https://{}:{}/'.format(self.host, self.port)
             self.ws_url= 'wss://{}:{}/wss/s/default/events'.format(self.host, self.port)
             self.login_url = self.url + 'api/login'
         self.initial_info_url = self.url + 'api/s/default/stat/device'
@@ -86,6 +88,27 @@ class UnifiClient(object):
         log.debug('Python: %s' % repr(sys.version_info))
         
         self.connect_websocket()
+        
+    def is_unifi_os(self):
+        '''
+        check for Unifi OS controller eg UDM, UDM Pro.
+        HEAD request will return 200 id Unifi OS,
+        if this is a Standard controller, we will get 302 (redirect) to /manage
+        '''
+        if self.ssl_verify is False:
+            # Disable insecure warnings - our server doesn't have root certs
+            from requests.packages.urllib3.exceptions import InsecureRequestWarning
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    
+        r = requests.head('https://{}:{}'.format(self.host, self.port), verify=self.ssl_verify, timeout=self.timeout)
+        if r.status_code == 200:
+            log.info('Unifi OS controller detected')
+            return True
+        if r.status_code == 302:
+            log.info('Unifi Standard controller detected')
+            return False
+        log.warning('Unable to determine controller type - using Unifi Standard controller')
+        return False
         
     def connect_websocket(self):
         '''
@@ -131,7 +154,7 @@ class UnifiClient(object):
             log.info('received sync: %s' % json.dumps(data, indent=2))
             #do something with user syncs here
         elif update_type == "speed-test:update":
-            log.info('received speedtest: %s' % json.dumps(data, indent=2))
+            log.debug('received speedtest: %s' % json.dumps(data, indent=2))
             #do something with speed tests here
         elif update_type == "sta:sync":
             log.info('received sta:sync: message')
@@ -251,7 +274,7 @@ class UnifiClient2(UnifiClient):
     '''
     Python 2 websocket class
     '''
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=False):
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=None):
         super(UnifiClient2, self).__init__(username, password, host, port, ssl_verify, q, timeout, unifi_os)
    
     def connect_websocket(self):
@@ -369,7 +392,6 @@ def main():
     parser.add_argument('-b','--broker', action="store", default=None, help='mqtt broker to publish sensor data to. (default=None)')
     parser.add_argument('-p','--port', action="store", type=int, default=1883, help='mqtt broker port (default=1883)')
     parser.add_argument('-u','--user', action="store", default=None, help='mqtt broker username. (default=None)')
-    parser.add_argument('-uos','--unifi_os', action="store", default=False, help='UDM Pro connection (default=False)')
     parser.add_argument('-pw','--passwd', action="store", default=None, help='mqtt broker password. (default=None)')
     parser.add_argument('-pt','--pub_topic', action="store",default='/unifi_data/', help='topic to publish unifi data to. (default=/unifi_data/)')
     parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
@@ -416,7 +438,7 @@ def main():
             mqttc.loop_start()
    
     
-        client = UnifiClient(arg.username, arg.password, arg.IP, arg.unifi_port, arg.ssl_verify, unifi_os=arg.unifi_os)
+        client = UnifiClient(arg.username, arg.password, arg.IP, arg.unifi_port, arg.ssl_verify)
 
         while True:
             data = client.devices()

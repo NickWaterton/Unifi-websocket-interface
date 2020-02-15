@@ -26,8 +26,9 @@
 # N Waterton V 1.2.1 29th july 2019 - Fixes for Flex 5 POE Switch.
 # N Waterton V 1.2.2 23 August 2019 - Add display of POE power and port name even if port is not used for data, if POE power consumption >0
 # N Waterton V 1.2.3 13th February    added basic support for UDM Pro
+# N Waterton V 1.2.4 15th February    added enhanced support for UDM Pro
 
-__VERSION__ = '1.2.3'
+__VERSION__ = '1.2.4'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -229,7 +230,7 @@ class UnifiApp(Grx.Application):
         
         self.default_text_lines = { 'usw':1,
                                     'ugw':6,
-                                    'udm':3,
+                                    'udm':6,
                                     'uap':3
                                   }
         self.text_lines = self.default_text_lines.copy()
@@ -334,6 +335,8 @@ class UnifiApp(Grx.Application):
                 if '=' in value:
                     value = value.split('=')[1].strip()
                 self.custom['ugw'][usg] = eval(value)
+                self.default_text_lines['ugw'] = int(self.custom['ugw'][usg][-1])
+                self.default_text_lines['udm'] = int(self.custom['ugw'][usg][-1])
                 log.info('UGW custom: %s=%s' % (usg,value))
                 
         if 'usw' in config:
@@ -354,6 +357,7 @@ class UnifiApp(Grx.Application):
                 self.custom['uap'][uap] = eval(value)
                 log.info('UAP custom: %s=%s' % (uap,value))
                 
+        self.text_lines = self.default_text_lines.copy()        
         
     def draw_key(self, x=30, y=182):
         #x = 30
@@ -441,7 +445,7 @@ class UnifiApp(Grx.Application):
     def get_unifi_data(self):
         simulate_update = True
         if not self.arg.simulate:
-            client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify, unifi_os=arg.unifi_os)
+            client = UnifiClient(arg.username, arg.password, arg.IP, arg.port, ssl_verify=arg.ssl_verify)
         while not self.exit.value:
             try:
                 with self.update.get_lock():
@@ -1733,7 +1737,10 @@ class NetworkDevice():
             self.update_from_data_device_specific()
             
             #log.info('mem: %s, total mem: %s' % (self.data['sys_stats'].get("mem_used", 0),self.data['sys_stats'].get("mem_total", 1)))
-            mem_percent = self.data['sys_stats'].get("mem_used", 0)*100//max(1,self.data['sys_stats'].get("mem_total", 0))
+            if self.data.get("system-stats"):
+                mem_percent = int(float(self.data["system-stats"].get("mem", 0)))
+            else:
+                mem_percent = self.data['sys_stats'].get("mem_used", 0)*100//max(1,self.data['sys_stats'].get("mem_total", 0))
             max_power = self.data.get("total_max_power", 0)
             if max_power > 0 and max_power != self.max_power:
                 self.max_power = max_power
@@ -2066,10 +2073,8 @@ class USG(NetworkDevice):
         
 class UDM(NetworkDevice):
 
-    models = {  'UGW3'  : {'ports':{'number':3, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway 3P'},
-                'UGW4'	: {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':2, 'rows':1}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway 4P'},     #4 RJ45's and 2 side by side SFP+
-                'UGWHD4' : {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':2, 'rows':1}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Security Gateway HD'},   #unknown for now
-                'UGWXG'	: {'ports':{'number':1, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':1}, 'sfp+':{'number':8, 'rows':2}, 'order': [2,0,1], 'name': 'UniFi Security Gateway XG-8'},   #8 SFP+ 4x2 and 1 RJ45 9lower)
+    models = {  'UDMPRO'  : {'ports':{'number':11, 'rows':2}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':2, 'rows':2}, 'name': 'UniFi Dream Machine pro'},
+                'UDM'	  : {'ports':{'number':5, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Dream Machine'},
              }
              
     type='ugw'  #UDM (gateway) type
@@ -2092,8 +2097,9 @@ class UDM(NetworkDevice):
             return
         self.text_override = False
         try:
-            self.text= [ 'Load:%-14s' % (self.device_params['load']),
-                         'Mem:%-3d%%' % self.device_params['mem'],
+
+            self.text= [ 'Load:%-14s OverTemp: %s' % (self.device_params['load'], 'Y' if self.data.get('overheating', False) else 'N'),
+                         'Mem:%-3d%% FW_VER: %s' % (self.device_params['mem'], self.device_params['fw_ver']),
                          'UP:%-16s' % (self.device_params['uptime_text']),
                        ]
 
@@ -2101,7 +2107,8 @@ class UDM(NetworkDevice):
                 self.text.append('MAC: %s' % self.device_params['mac'])
                 self.text.append('FW_VER: %s%s' % (self.device_params['fw_ver'], self.upgrade_text))
             for name, ip  in self.ip.items():
-                self.text.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
+                if any(n in name for n in ['WAN', 'LAN']):
+                    self.text.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
         except KeyError:
             self.text = []
         
@@ -2109,19 +2116,26 @@ class UDM(NetworkDevice):
         '''
         Override this with specific data for devices other than switches
         '''
-        for port in self.data["port_table"]:
+        #log.info('UDM self.data: %s' % json.dumps(self.data, indent=2))
+  
+        for network in self.data.get("network_table"):  #get LANS
+            name = network.get('name','').upper()
+            if name:
+                self.ip[name] = network.get('ip_subnet','0.0.0.0')  #get LAN Ip's
+        
+        for port in self.data.get("port_table"):
             port_number = self.get_port_number(port)
-            if port["name"].lower() == 'port %s' % port_number:
-                if self.ports[port_number].is_downlink == -1:
-                    self.set_port_name(port_number, 'LAN')
-                elif self.ports[port_number].is_downlink == 1:
-                    self.set_port_name(port_number, 'WAN')
-                else:
-                    self.set_port_name(port_number, '')
-            #self.set_port_name(port_number, port["name"])
-            #self.set_ip(port.get("ip", ''),port["name"])
-            #if 'lan' in port["name"] or port_number > 1:
-            #    self.set_downlink(port_number, -1)    #set as downlink
+            network_name = port.get('network_name', '').upper()
+            
+            if not port.get('up', False):
+                self.set_port_enabled(port_number, False)
+            else:
+                self.ip[network_name] = port.get('ip')  #get WAN ip's for enabled ports
+                
+            if self.ports[port_number].is_downlink == -1:
+                self.set_port_name(port_number, network_name)
+            elif self.ports[port_number].is_downlink == 1:
+                self.set_port_name(port_number, network_name)
             
     def extra_text(self):
         '''
@@ -2376,7 +2390,6 @@ def main():
     parser.add_argument('-f','--font_size', action="store", type=int, default=10, help='font size - controlls device size (default=10)')
     parser.add_argument('-t','--extra_text', action='store_true', help='Display Extra text in APs to fill screen (Default false)', default = False)
     parser.add_argument('-c','--custom', action="store", default=None, help='use custom layout (default=None)')
-    parser.add_argument('-uos','--unifi_os', action='store_true', help='is controller on a Unifi OS system like UDM? default False', default = False)
     parser.add_argument('-l','--log', action="store",default="None", help='log file. (default=None)')
     parser.add_argument('-D','--debug', action='store_true', help='debug mode', default = False)
     parser.add_argument('-li','--list', action='store_true', help='list built in devices (for use in simulation)', default = False)

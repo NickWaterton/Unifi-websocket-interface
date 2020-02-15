@@ -42,7 +42,7 @@ class UnifiClient3(UnifiClient):
     '''
     Python 3 websocket class
     '''
-    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=False):
+    def __init__(self, username, password, host='localhost', port=8443, ssl_verify=False, q=None, timeout=10.0, unifi_os=None):
         super().__init__(username, password, host, port, ssl_verify, q, timeout, unifi_os)
         
     def connect_websocket(self):
@@ -54,7 +54,7 @@ class UnifiClient3(UnifiClient):
         '''
         Python 3 only!
         '''
-        log.info('Python 3 websocket')
+        log.debug('Python 3 websocket')
         import asyncio
         
         loop = asyncio.new_event_loop()
