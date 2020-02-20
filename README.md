@@ -108,6 +108,7 @@ optional arguments:
 `custom.ini` allows you to specify the position and size of each item on the display. An example `custom.ini` file is included.
 
 This is what it looks like (New UDMP):
+**NOTE** Yellow text indicates that there is a fw upgrade available (white is normal).
 ![Network Monitor](udmp.jpg)
 With old USG:
 ![Network Monitor](monitor.jpg)
