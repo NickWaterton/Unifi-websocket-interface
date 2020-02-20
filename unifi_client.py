@@ -24,6 +24,24 @@
 # N Waterton 13th February  2020 V 1.1.3: added basic support for UDM Pro
 # N Waterton 15th February  2020 V 1.1.4: added enhanced support for UDM Pro
 
+'''
+core: {
+				base: "/api",
+				paths: {
+					apps: "/apps",
+					deviceInfo: "/device",
+					info: "/info",
+					login: "/auth/login",
+					logout: "/auth/logout",
+					self: "/users/self",
+					status: "/status",
+					system: "/system",
+					systemWs: "/ws/system"
+				}
+			}
+
+'''
+
 from __future__ import print_function
 
 import json

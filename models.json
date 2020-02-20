@@ -237,7 +237,7 @@
       }
     },
     "U7HD": {
-      "name": "UniFi AP-AC-HD",
+      "name": "UniFi AP-HD",
       "unifi": {
         "features": {
           "ac": 1,
@@ -486,7 +486,7 @@
       }
     },
     "U7SHD": {
-      "name": "UniFi AP-AC-SHD",
+      "name": "UniFi AP-SHD",
       "unifi": {
         "features": {
           "ac": 1,
@@ -554,14 +554,14 @@
       }
     },
     "UDMB": {
-      "name": "UniFi Dream Machine Beacon",
+      "name": "UniFi AP-BeaconHD",
       "unifi": {
         "features": {
           "ac": 1,
           "bandsteer": 1,
           "gen": 2
         },
-        "name": "UniFi Dream Machine Beacon",
+        "name": "UniFi AP-BeaconHD",
         "radios": {
           "na": {
             "gain": 4,
@@ -641,6 +641,13 @@
         "type": "uap"
       }
     },
+    "UP1": {
+      "name": "UniFi Smart Plug",
+      "unifi": {
+        "name": "UniFi Smart Plug",
+        "type": "uap"
+      }
+    },
     "UXBSDM": {
       "name": "UniFi AP-BaseStationXG-Black",
       "unifi": {
@@ -699,192 +706,6 @@
     }
   },
   "UDM": {
-    "UDM": {
-      "bleServices": {
-        "configured": "d83b80e3-e81f-4f66-879b-779be5f6a693",
-        "default": "59a52bba-e33b-4739-a82d-7e875c8ded0e"
-      },
-      "details": {
-        "ipsThroughput": "850 Mbps"
-      },
-      "diagram": [
-        "01 02 03 04 __ 05"
-      ],
-      "features": {
-        "ac": 1,
-        "bandsteer": 1,
-        "gen": 2
-      },
-      "name": "UniFi Dream Machine",
-      "networkGroups": {
-        "eth0": "LAN",
-        "eth1": "LAN",
-        "eth2": "LAN",
-        "eth3": "LAN",
-        "eth4": "WAN"
-      },
-      "ports": {
-        "eth0": "LAN",
-        "eth1": "LAN",
-        "eth2": "LAN",
-        "eth3": "LAN",
-        "eth4": "WAN"
-      },
-      "subtypes": [
-        "ugw",
-        "usw",
-        "uap"
-      ],
-      "type": "udm",
-      "unifi": {
-        "bleServices": {
-          "configured": "d83b80e3-e81f-4f66-879b-779be5f6a693",
-          "default": "59a52bba-e33b-4739-a82d-7e875c8ded0e"
-        },
-        "details": {
-          "ipsThroughput": "850 Mbps"
-        },
-        "diagram": [
-          "01 02 03 04 __ 05"
-        ],
-        "features": {
-          "ac": 1,
-          "bandsteer": 1,
-          "gen": 2
-        },
-        "name": "UniFi Dream Machine",
-        "networkGroups": {
-          "eth0": "LAN",
-          "eth1": "LAN",
-          "eth2": "LAN",
-          "eth3": "LAN",
-          "eth4": "WAN"
-        },
-        "ports": {
-          "eth0": "LAN",
-          "eth1": "LAN",
-          "eth2": "LAN",
-          "eth3": "LAN",
-          "eth4": "WAN"
-        },
-        "radios": {
-          "na": {
-            "gain": 4,
-            "maxPower": 25
-          },
-          "ng": {
-            "gain": 3,
-            "maxPower": 20
-          }
-        },
-        "subtypes": [
-          "ugw",
-          "usw",
-          "uap"
-        ],
-        "type": "udm"
-      }
-    },
-    "UDMPRO": {
-      "bleServices": {
-        "configured": "26816cf6-334b-4580-bc3f-f1b72ef5d93e",
-        "default": "afcad778-a44c-48d2-9b50-dbbaeff1e77a"
-      },
-      "details": {
-        "ipsThroughput": "1 Gbps"
-      },
-      "diagram": [
-        "01 03 05 07 __ 10",
-        "02 04 06 08 09 11"
-      ],
-      "name": "UniFi Dream Machine Pro",
-      "networkGroups": {
-        "eth0": "LAN",
-        "eth1": "LAN",
-        "eth2": "LAN",
-        "eth3": "LAN",
-        "eth4": "LAN",
-        "eth5": "LAN",
-        "eth6": "LAN",
-        "eth7": "LAN",
-        "eth8": "WAN",
-        "eth9": "WAN"
-      },
-      "ports": {
-        "eth0": "LAN",
-        "eth1": "LAN",
-        "eth2": "LAN",
-        "eth3": "LAN",
-        "eth4": "LAN",
-        "eth5": "LAN",
-        "eth6": "LAN",
-        "eth7": "LAN",
-        "eth8": "WAN",
-        "eth9": "WAN",
-        "sfp": [
-          10,
-          11
-        ],
-        "standard": 9
-      },
-      "subtypes": [
-        "ugw",
-        "usw"
-      ],
-      "type": "udm",
-      "unifi": {
-        "bleServices": {
-          "configured": "26816cf6-334b-4580-bc3f-f1b72ef5d93e",
-          "default": "afcad778-a44c-48d2-9b50-dbbaeff1e77a"
-        },
-        "details": {
-          "ipsThroughput": "1 Gbps"
-        },
-        "diagram": [
-          "01 03 05 07 __ __ 10",
-          "02 04 06 08 __ 09 11"
-        ],
-        "name": "UniFi Dream Machine Pro",
-        "networkGroups": {
-          "eth0": "LAN",
-          "eth1": "LAN",
-          "eth10": "LAN",
-          "eth2": "LAN",
-          "eth3": "LAN",
-          "eth4": "LAN",
-          "eth5": "LAN",
-          "eth6": "LAN",
-          "eth7": "LAN",
-          "eth8": "WAN",
-          "eth9": "WAN2"
-        },
-        "ports": {
-          "eth0": "LAN",
-          "eth1": "LAN",
-          "eth10": "LAN",
-          "eth2": "LAN",
-          "eth3": "LAN",
-          "eth4": "LAN",
-          "eth5": "LAN",
-          "eth6": "LAN",
-          "eth7": "LAN",
-          "eth8": "WAN1",
-          "eth9": "WAN2",
-          "plus": [
-            10,
-            11
-          ],
-          "standard": 9
-        },
-        "subtypes": [
-          "ugw",
-          "usw"
-        ],
-        "type": "udm"
-      }
-    }
-  },
-  "UGW": {
     "UDM": {
       "name": "UniFi Dream Machine",
       "poe": false,
@@ -961,12 +782,12 @@
         "rows": 2
       },
       "sfp": {
-        "number": 2,
-        "rows": 2
-      },
-      "sfp+": {
         "number": 0,
         "rows": 0
+      },
+      "sfp+": {
+        "number": 2,
+        "rows": 2
       },
       "unifi": {
         "bleServices": {
@@ -1019,6 +840,96 @@
         "type": "udm"
       }
     },
+    "UDMSE": {
+      "name": "UniFi Dream Machine SE",
+      "order": [
+        0,
+        1,
+        2
+      ],
+      "poe": true,
+      "ports": {
+        "number": 7,
+        "rows": 1
+      },
+      "sfp": {
+        "number": 0,
+        "rows": 0
+      },
+      "sfp+": {
+        "number": 1,
+        "rows": 1
+      },
+      "unifi": {
+        "bleServices": {
+          "configured": "04a8878e-c929-4519-82e2-566e5d44bd57",
+          "default": "f5a8e9b9-3e75-44e2-9126-c5b33d2578aa"
+        },
+        "details": {
+          "ipsThroughput": "850 Mbps"
+        },
+        "diagram": [
+          "01 02 03 04 05 06 __ 07 08"
+        ],
+        "features": {
+          "ac": 1,
+          "bandsteer": 1,
+          "gen": 2,
+          "poe": 1
+        },
+        "name": "UniFi Dream Machine SE",
+        "networkGroups": {
+          "eth0": "LAN",
+          "eth1": "LAN",
+          "eth2": "LAN",
+          "eth3": "LAN",
+          "eth4": "LAN",
+          "eth5": "LAN",
+          "eth6": "WAN",
+          "eth7": "WAN2"
+        },
+        "ports": {
+          "eth0": "LAN",
+          "eth1": "LAN",
+          "eth2": "LAN",
+          "eth3": "LAN",
+          "eth4": "LAN",
+          "eth5": "LAN",
+          "eth6": "WAN",
+          "eth7": "WAN2",
+          "plus": [
+            8
+          ],
+          "standard": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        },
+        "radios": {
+          "na": {
+            "gain": 4,
+            "maxPower": 25
+          },
+          "ng": {
+            "gain": 3,
+            "maxPower": 20
+          }
+        },
+        "subtypes": [
+          "ugw",
+          "usw",
+          "uap"
+        ],
+        "type": "udm"
+      }
+    }
+  },
+  "UGW": {
     "UGW3": {
       "name": "UniFi Security Gateway 3P",
       "poe": false,
@@ -1036,7 +947,8 @@
       },
       "unifi": {
         "details": {
-          "ipsThroughput": "85 Mbps"
+          "ipsThroughput": "85 Mbps",
+          "legacyPortRemap": 1
         },
         "diagram": [
           "00 01 02"
@@ -1092,14 +1004,13 @@
     },
     "UGW4": {
       "name": "UniFi Security Gateway 4P",
-      "poe": false,
       "ports": {
         "number": 4,
         "rows": 1
       },
       "sfp": {
-        "number": 2,
-        "rows": 1
+        "number": 0,
+        "rows": 0
       },
       "sfp+": {
         "number": 0,
@@ -1168,14 +1079,13 @@
     },
     "UGWHD4": {
       "name": "UniFi Security Gateway HD",
-      "poe": false,
       "ports": {
         "number": 4,
         "rows": 1
       },
       "sfp": {
-        "number": 2,
-        "rows": 1
+        "number": 0,
+        "rows": 0
       },
       "sfp+": {
         "number": 0,
@@ -1197,23 +1107,18 @@
     },
     "UGWXG": {
       "name": "UniFi Security Gateway XG-8",
-      "order": [
-        2,
-        0,
-        1
-      ],
       "poe": false,
       "ports": {
-        "number": 1,
-        "rows": 1
+        "number": 9,
+        "rows": 2
       },
       "sfp": {
         "number": 0,
-        "rows": 1
+        "rows": 0
       },
       "sfp+": {
-        "number": 8,
-        "rows": 2
+        "number": 0,
+        "rows": 0
       },
       "unifi": {
         "bleServices": {
@@ -1325,7 +1230,12 @@
   },
   "USW": {
     "S216150": {
-      "name": "Unifi Switch 16 AT-150W",
+      "name": "UniFi Switch 16 AT-150W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 16,
@@ -1359,7 +1269,12 @@
       }
     },
     "S224250": {
-      "name": "Unifi Switch 24 AT-250W",
+      "name": "UniFi Switch 24 AT-250W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 24,
@@ -1393,7 +1308,12 @@
       }
     },
     "S224500": {
-      "name": "Unifi Switch 24 AT-500W",
+      "name": "UniFi Switch 24 AT-500W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 24,
@@ -1427,7 +1347,12 @@
       }
     },
     "S248500": {
-      "name": "Unifi Switch 48 AT-500W",
+      "name": "UniFi Switch 48 AT-500W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 48,
@@ -1465,7 +1390,12 @@
       }
     },
     "S248750": {
-      "name": "Unifi Switch 48 AT-750W",
+      "name": "UniFi Switch 48 AT-750W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 48,
@@ -1503,7 +1433,12 @@
       }
     },
     "S28150": {
-      "name": "Unifi Switch 8 AT-150W",
+      "name": "UniFi Switch 8 AT-150W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 8,
@@ -1536,7 +1471,12 @@
       }
     },
     "US16P150": {
-      "name": "Unifi Switch 16 POE-150W",
+      "name": "UniFi Switch 16 POE-150W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 16,
@@ -1570,7 +1510,12 @@
       }
     },
     "US24": {
-      "name": "Unifi Switch 24",
+      "name": "UniFi Switch 24",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": false,
       "ports": {
         "number": 24,
@@ -1600,7 +1545,12 @@
       }
     },
     "US24P250": {
-      "name": "Unifi Switch 24 POE-250W",
+      "name": "UniFi Switch 24 POE-250W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 24,
@@ -1634,7 +1584,12 @@
       }
     },
     "US24P500": {
-      "name": "Unifi Switch 24 POE-500W",
+      "name": "UniFi Switch 24 POE-500W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 24,
@@ -1668,7 +1623,12 @@
       }
     },
     "US24PL2": {
-      "name": "Unifi Switch 24 L2 POE",
+      "name": "UniFi Switch 24 L2 POE",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 24,
@@ -1733,8 +1693,44 @@
         "type": "usw"
       }
     },
+    "US24PRO2": {
+      "name": "UniFi Switch PRO 24",
+      "order": [
+        0,
+        1,
+        2
+      ],
+      "ports": {
+        "number": 24,
+        "rows": 2
+      },
+      "sfp": {
+        "number": 0,
+        "rows": 0
+      },
+      "sfp+": {
+        "number": 2,
+        "rows": 2
+      },
+      "unifi": {
+        "name": "UniFi Switch PRO 24",
+        "ports": {
+          "plus": [
+            25,
+            26
+          ],
+          "standard": 24
+        },
+        "type": "usw"
+      }
+    },
     "US48": {
-      "name": "Unifi Switch 48",
+      "name": "UniFi Switch 48",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": false,
       "ports": {
         "number": 48,
@@ -1768,7 +1764,12 @@
       }
     },
     "US48P500": {
-      "name": "Unifi Switch 48 POE-500W",
+      "name": "UniFi Switch 48 POE-500W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 48,
@@ -1806,7 +1807,12 @@
       }
     },
     "US48P750": {
-      "name": "Unifi Switch 48 POE-750W",
+      "name": "UniFi Switch 48 POE-750W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 48,
@@ -1844,7 +1850,12 @@
       }
     },
     "US48PL2": {
-      "name": "Unifi Switch 48 L2 POE",
+      "name": "UniFi Switch 48 L2 POE",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 48,
@@ -1910,8 +1921,41 @@
         "type": "usw"
       }
     },
+    "US48PRO2": {
+      "name": "UniFi Switch PRO 48",
+      "order": [
+        0,
+        1,
+        2
+      ],
+      "ports": {
+        "number": 48,
+        "rows": 2
+      },
+      "sfp": {
+        "number": 0,
+        "rows": 0
+      },
+      "sfp+": {
+        "number": 4,
+        "rows": 2
+      },
+      "unifi": {
+        "name": "UniFi Switch PRO 48",
+        "ports": {
+          "plus": "49-52",
+          "standard": 48
+        },
+        "type": "usw"
+      }
+    },
     "US6XG150": {
-      "name": "Unifi Switch 6XG POE-150W",
+      "name": "UniFi Switch XG 6 POE",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 4,
@@ -1953,8 +1997,8 @@
       }
     },
     "US8": {
-      "name": "Unifi Switch 8",
-      "poe": false,
+      "name": "UniFi Switch 8",
+      "poe": true,
       "ports": {
         "number": 8,
         "rows": 1
@@ -1982,7 +2026,12 @@
       }
     },
     "US8P150": {
-      "name": "Unifi Switch 8 POE-150W",
+      "name": "UniFi Switch 8 POE-150W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 8,
@@ -2015,7 +2064,7 @@
       }
     },
     "US8P60": {
-      "name": "Unifi Switch 8 POE-60W",
+      "name": "UniFi Switch 8 POE-60W",
       "poe": true,
       "ports": {
         "number": 8,
@@ -2044,8 +2093,8 @@
       }
     },
     "USC8": {
-      "name": "Unifi Switch 8",
-      "poe": false,
+      "name": "UniFi Switch 8",
+      "poe": true,
       "ports": {
         "number": 8,
         "rows": 1
@@ -2073,7 +2122,12 @@
       }
     },
     "USC8P150": {
-      "name": "Unifi Switch 8 POE-150W",
+      "name": "UniFi Switch 8 POE-150W",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 8,
@@ -2139,7 +2193,7 @@
       }
     },
     "USC8P60": {
-      "name": "Unifi Switch 8 POE-60W",
+      "name": "UniFi Switch 8 POE-60W",
       "poe": true,
       "ports": {
         "number": 8,
@@ -2197,7 +2251,12 @@
       }
     },
     "USL16P": {
-      "name": "Unifi Switch 16 POE-150W",
+      "name": "UniFi Switch 16 POE",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 16,
@@ -2226,8 +2285,44 @@
         "type": "usw"
       }
     },
+    "USL24": {
+      "name": "UniFi Switch 24",
+      "order": [
+        0,
+        1,
+        2
+      ],
+      "ports": {
+        "number": 24,
+        "rows": 2
+      },
+      "sfp": {
+        "number": 2,
+        "rows": 2
+      },
+      "sfp+": {
+        "number": 0,
+        "rows": 0
+      },
+      "unifi": {
+        "name": "UniFi Switch 24",
+        "ports": {
+          "sfp": [
+            25,
+            26
+          ],
+          "standard": 24
+        },
+        "type": "usw"
+      }
+    },
     "USL24P": {
-      "name": "Unifi Switch 24 POE-250W",
+      "name": "UniFi Switch 24 POE",
+      "order": [
+        0,
+        1,
+        2
+      ],
       "poe": true,
       "ports": {
         "number": 24,
@@ -2256,14 +2351,104 @@
         "type": "usw"
       }
     },
+    "USL48P": {
+      "name": "UniFi Switch 48 POE",
+      "order": [
+        0,
+        1,
+        2
+      ],
+      "poe": true,
+      "ports": {
+        "number": 48,
+        "rows": 2
+      },
+      "sfp": {
+        "number": 4,
+        "rows": 2
+      },
+      "sfp+": {
+        "number": 0,
+        "rows": 0
+      },
+      "unifi": {
+        "features": {
+          "poe": 1
+        },
+        "name": "UniFi Switch 48 POE",
+        "ports": {
+          "sfp": [
+            49,
+            50,
+            51,
+            52
+          ],
+          "standard": 48
+        },
+        "type": "usw"
+      }
+    },
+    "USMINI": {
+      "name": "UniFi Switch Flex Mini",
+      "ports": {
+        "number": 5,
+        "rows": 1
+      },
+      "sfp": {
+        "number": 0,
+        "rows": 0
+      },
+      "sfp+": {
+        "number": 0,
+        "rows": 0
+      },
+      "unifi": {
+        "name": "UniFi Switch Flex Mini",
+        "ports": {
+          "standard": 5
+        },
+        "primaryPortGroupCount": 5,
+        "type": "usw"
+      }
+    },
+    "USPRPS": {
+      "name": "UniFi Smart Power - Redundant Power System",
+      "ports": {
+        "number": 6,
+        "rows": 2
+      },
+      "sfp": {
+        "number": 0,
+        "rows": 0
+      },
+      "sfp+": {
+        "number": 0,
+        "rows": 0
+      },
+      "unifi": {
+        "diagram": [
+          "01 03 05",
+          "02 04 06"
+        ],
+        "name": "UniFi Smart Power - Redundant Power System",
+        "primaryPortGroupCount": 6,
+        "rps": {
+          "diagram": [
+            "01 03 05",
+            "02 04 06"
+          ],
+          "primaryPortGroupCount": 6
+        },
+        "type": "usw"
+      }
+    },
     "USXG": {
-      "name": "Unifi Switch 16XG",
+      "name": "UniFi Switch 16XG",
       "order": [
         2,
         0,
         1
       ],
-      "poe": false,
       "ports": {
         "number": 4,
         "rows": 1

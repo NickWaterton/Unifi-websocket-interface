@@ -175,6 +175,8 @@ class Controller(object):
         if ssl_verify is False:
             warnings.simplefilter("default", category=requests.packages.
                                   urllib3.exceptions.InsecureRequestWarning)
+                                  
+        self.unifi_os = self.is_unifi_os()
 
         self.session = requests.Session()
         self.session.verify = ssl_verify
@@ -196,7 +198,10 @@ class Controller(object):
             return obj
 
     def _api_url(self):
-        return self.url + 'api/s/' + self.site_id + '/'
+        if self.unifi_os:
+            return self.url + 'proxy/network/api/s/' + self.site_id + '/'
+        else:
+            return self.url + 'api/s/' + self.site_id + '/'
 
     @retry_login
     def _read(self, url, params=None):
@@ -228,7 +233,10 @@ class Controller(object):
 
         # XXX Why doesn't passing in the dict work?
         params = {'username': self.username, 'password': self.password}
-        login_url = self.url + 'api/login'
+        if self.unifi_os:
+            login_url = self.url + 'api/auth/login'
+        else:
+            login_url = self.url + 'api/login'
 
         r = self.session.post(login_url, json=params)
         if r.status_code is not 200:
@@ -237,6 +245,27 @@ class Controller(object):
     def _logout(self):
         log.debug('logout()')
         self._api_write('logout')
+        
+    def is_unifi_os(self):
+        '''
+        check for Unifi OS controller eg UDM, UDM Pro.
+        HEAD request will return 200 id Unifi OS,
+        if this is a Standard controller, we will get 302 (redirect) to /manage
+        '''
+        if self.ssl_verify is False:
+            # Disable insecure warnings - our server doesn't have root certs
+            from requests.packages.urllib3.exceptions import InsecureRequestWarning
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    
+        r = requests.head('https://{}:{}'.format(self.host, self.port), verify=self.ssl_verify, timeout=10.0)
+        if r.status_code == 200:
+            log.info('Unifi OS controller detected')
+            return True
+        if r.status_code == 302:
+            log.info('Unifi Standard controller detected')
+            return False
+        log.warning('Unable to determine controller type - using Unifi Standard controller')
+        return False
         
     def update_dpi(self):
         try:
@@ -313,6 +342,12 @@ class Controller(object):
                 self.site_id = site['name']
                 return True
         raise APIError("No site %s found" % name)
+        
+    def get_site_test(self):
+        return self._read(self.url+'ws/system')
+        
+    def get_system_info(self):
+        return self._read(self.url+'api/system')
         
     def get_site_stats(self):
         """Return a list of all Sites and stats."""

@@ -27,8 +27,9 @@
 # N Waterton V 1.2.2 23 August 2019 - Add display of POE power and port name even if port is not used for data, if POE power consumption >0
 # N Waterton V 1.2.3 13th February    added basic support for UDM Pro
 # N Waterton V 1.2.4 15th February    added enhanced support for UDM Pro
+# N Waterton V 1.3.0 20th February    major re-write for UDM Pro, new category of device "udm"
 
-__VERSION__ = '1.2.4'
+__VERSION__ = '1.3.0'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -167,8 +168,8 @@ class UnifiApp(Grx.Application):
                             self.text_lines['ugw'] = 8
                             self.x_pos = None
                         elif device.type == 'udm':
-                            self.port_size=Grx.get_height()//2#140
-                            self.text_lines['udm'] = 8
+                            self.port_size=Grx.get_height()//6
+                            self.text_lines['udm'] = 7
                             self.x_pos = None
                         else:   #uap
                             self.port_size=Grx.get_height()//4#140
@@ -187,6 +188,7 @@ class UnifiApp(Grx.Application):
             Grx.clear_context(self.black)
             #self.network_switches = {}
             #self.usg = {}
+            #self.udm = {}
             #self.uap = {}
             self.redraw_key = True
             self.draw_all_devices(True)
@@ -230,7 +232,7 @@ class UnifiApp(Grx.Application):
         
         self.default_text_lines = { 'usw':1,
                                     'ugw':6,
-                                    'udm':6,
+                                    'udm':5,
                                     'uap':3
                                   }
         self.text_lines = self.default_text_lines.copy()
@@ -248,12 +250,13 @@ class UnifiApp(Grx.Application):
         
         self.network_switches = {}
         self.usg = {}
+        self.udm = {}
         self.uap = {}
         
         self.ap_spacing = None  #horizontal spacing of ap's
         self.ap_extra_text=0    #extra text lines to fit in Ap's if possible (gets updated later)
         
-        self.all_devices = [self.network_switches, self.usg, self.uap]
+        self.all_devices = [self.network_switches, self.usg, self.udm, self.uap]
         
         self.device_locations = {}
 
@@ -336,8 +339,17 @@ class UnifiApp(Grx.Application):
                     value = value.split('=')[1].strip()
                 self.custom['ugw'][usg] = eval(value)
                 self.default_text_lines['ugw'] = int(self.custom['ugw'][usg][-1])
-                self.default_text_lines['udm'] = int(self.custom['ugw'][usg][-1])
                 log.info('UGW custom: %s=%s' % (usg,value))
+                
+        if 'udm' in config:
+            udm = config['udm']
+            self.custom['udm'] = {}
+            for udm, value in udm.items():
+                if '=' in value:
+                    value = value.split('=')[1].strip()
+                self.custom['udm'][udm] = eval(value)
+                self.default_text_lines['udm'] = int(self.custom['udm'][udm][-1])
+                log.info('UDM custom: %s=%s' % (udm,value))
                 
         if 'usw' in config:
             usw = config['usw']
@@ -552,6 +564,7 @@ class UnifiApp(Grx.Application):
 
         switches = []
         usgs = []
+        udms = []
         uaps=[]
         
         for device in devices:
@@ -560,22 +573,28 @@ class UnifiApp(Grx.Application):
             elif device["type"]=='ugw':
                 usgs.append(device)
             elif device["type"]=='udm':
-                usgs.append(device)
+                udms.append(device)
             elif device["type"]=='uap':
                 uaps.append(device)
                     
-        log.info('number of usgs/udms: %s, switches: %s, aps: %s' % (len(usgs),len(switches),len(uaps)))
+        log.info('number of usgs: %s, udms: %s, switches: %s, aps: %s' % (len(usgs),len(udms),len(switches),len(uaps)))
         
         if self.custom and not self.zoomed:
             #draw custom devices
             self.draw_custom_device('ugw', usgs, self.usg)
+            self.draw_custom_device('udm', udms, self.udm)
             self.draw_custom_device('usw', switches, self.network_switches)
             self.draw_custom_device('uap', uaps, self.uap)
         else:
             #auto layout/zoomed layout
             last_switch_pos = self.create_devices(-10, self.default_top_margin, self.network_switches, switches) #auto 10 in from the right, 10 down
-            last_usg_position = self.create_devices(self.x_pos, self.default_top_margin, self.usg, usgs)
-            if self.default_update_position is None:  #set initial key position below USG
+            if len(usgs) > 0:   #can't have USG and UDM...
+                last_usg_position = self.create_devices(self.x_pos, self.default_top_margin, self.usg, usgs)
+            elif len(udms) > 0:
+                last_usg_position = self.create_devices(self.x_pos, self.default_top_margin, self.udm, udms)
+            else:
+                last_usg_position = last_switch_pos
+            if self.default_update_position is None:  #set initial key position below USG/UDM
                 self.default_update_position = last_usg_position - self.text_height//2
                 self.set_default_positions()
             if self.x_pos is not None:
@@ -586,6 +605,7 @@ class UnifiApp(Grx.Application):
         
         self.update_device(self.network_switches, switches)
         self.update_device(self.usg, usgs)
+        self.update_device(self.udm, udms)
         self.update_device(self.uap, uaps)
  
         self.last_update = time.time()
@@ -1270,8 +1290,8 @@ class NetworkDevice():
             self.description =  model['name']
             self.unifi_data = model.get('unifi', None)  #get unifi data (extracted from controller) if it exists in database
             if isinstance(model.get('ports'), dict):
-                self.num_ports = model['ports']['number']
-                self.rows = model['ports']['rows']
+                self.num_ports = model['ports'].get('number',0)
+                self.rows = model['ports'].get('rows',1)
             else:
                 #self.num_ports = model['ports']    #don't really need this for AP's as we can figure it out
                 self.rows = 1
@@ -1297,7 +1317,7 @@ class NetworkDevice():
             log.info('model: %s NOT FOUND in database, guessing parameters' % self.model)
             return False
             
-    def extract_ports_list(self,ports):
+    def extract_ports_list(self,ports): #get_models.py has updated version
         '''
         returns ports list from unifi data as tuple of lists of port number ints
         eg ([0,1,2,3], [4,5],[])
@@ -1518,11 +1538,17 @@ class NetworkDevice():
         log.info('lines of text that fit in windows: %s' % text_lines)
         text = self.extra_text()
         
-        next_column = False #end line of text in '\n' to trigger new column manually
+        next_column = False #start or end line of text in '\n' to trigger new column manually
         
         line = 0
         for txt in text:
             line +=1
+            
+            if txt.startswith('\n'):
+                txt = txt[1:]
+                if line%text_lines != 0:
+                    next_column = True
+                    
             if line%text_lines == 0 or next_column:
                 line = 0
                 next_column = False
@@ -1536,7 +1562,7 @@ class NetworkDevice():
                 txt = txt[:-1]
                 if line%text_lines != 0:
                     next_column = True
-                    
+       
             next_line = text_top+self.text_height*(line%text_lines)
             #log.info('%s: drawing line: %d, %s' % (self.name, line, txt))
             Grx.draw_filled_box(left+self.text_offset, next_line, Grx.get_width()-offset-2, next_line+self.text_height, self.bg_color) #2 is the border line width
@@ -1682,7 +1708,8 @@ class NetworkDevice():
                 #log.info('updating port: %s, speed: %s ' % (port_number,port.get("speed",0)))
                 self.set_port_speed(port_number, port.get("speed",0))
                 self.set_port_power(port_number, port.get('poe_power', '0'))
-                self.set_port_enabled(port_number, port.get("enable", port.get("up",False)))
+                #self.set_port_enabled(port_number, port.get("enable", port.get("up",False)))   #can be enabled, but not up...
+                self.set_port_enabled(port_number, port.get("up", port.get("enable",False)))
          
                 if port.get("is_uplink",False):
                     #log.info('updating port as uplink : %s, name: %s ' % (port_number,'UP'))
@@ -1733,14 +1760,18 @@ class NetworkDevice():
                 self.set_port_name(uplink_port, 'P-UP')
             self.set_downlink(uplink_port, 1)
             #self.set_port_enabled(uplink_port, port.get("enable", port["up"])) #apparently only needed for AP's, so moved to AP class. Some switches mess this up
-
+ 
             self.update_from_data_device_specific()
             
             #log.info('mem: %s, total mem: %s' % (self.data['sys_stats'].get("mem_used", 0),self.data['sys_stats'].get("mem_total", 1)))
             if self.data.get("system-stats"):
                 mem_percent = int(float(self.data["system-stats"].get("mem", 0)))
+                cpu_percent = int(float(self.data["system-stats"].get("cpu", 0)))
+                uptime = int(self.data["system-stats"].get("uptime", 0))
             else:
                 mem_percent = self.data['sys_stats'].get("mem_used", 0)*100//max(1,self.data['sys_stats'].get("mem_total", 0))
+                cpu_percent = None
+                uptime = self.data.get("uptime", None)
             max_power = self.data.get("total_max_power", 0)
             if max_power > 0 and max_power != self.max_power:
                 self.max_power = max_power
@@ -1751,7 +1782,8 @@ class NetworkDevice():
                                  power=total_power*100//max(1,self.max_power),
                                  load=self.data['sys_stats'].get("loadavg_1", '-') + ','+self.data['sys_stats'].get("loadavg_5", '-')+ ','+self.data['sys_stats'].get("loadavg_15", '-'),
                                  mem=mem_percent,
-                                 uptime=self.data.get("uptime", None),
+                                 cpu=cpu_percent,
+                                 uptime=uptime,
                                  mac=self.data["mac"].upper(),
                                  fw_ver=self.data.get("version", None),
                                  upgrade=self.data.get("upgrade_to_firmware", None),
@@ -1780,6 +1812,7 @@ class NetworkDevice():
                              power=33,
                              load='1.0,1.1,1.2',
                              mem=50,
+                             cpu=50,
                              uptime=1082806 + uptime,
                              mac='00:00:00:00:00:00',
                              fw_ver='1.2.3.4.5',
@@ -1823,7 +1856,9 @@ class NetworkDevice():
     def get_port_number(self, port):
         port_number = port.get("port_idx", None)
         if port_number is None:
-            port_number = port.get("ifname",None)  #USG
+            port_number = port.get("ifname",None)   #USG/UDM
+        if port_number is None and self.type == 'udm':
+            port_number = port.get("name",None)     #UDM uplink section uses 'name' for the port ifname
         #if it's an AP, have to try harder to find the uplink port
         if port_number is None:
             for port in self.data["port_table"]:
@@ -1831,7 +1866,7 @@ class NetworkDevice():
                     port_number = port.get("port_idx",None)  #USG
                     break
             else:
-                port_number = 1
+                port_number = 1 #default for AP's that don't have more than one port
         return self.get_port_from_string(port_number)
             
     def get_port_from_string(self, port):
@@ -2077,14 +2112,14 @@ class UDM(NetworkDevice):
                 'UDM'	  : {'ports':{'number':5, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':0, 'rows':0}, 'name': 'UniFi Dream Machine'},
              }
              
-    type='ugw'  #UDM (gateway) type
+    type='udm'  #UDM (gateway) type
 
     def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
         self.load_models()
         self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
  
         self.init_rows(self.rows)
-        self.ip = OrderedDict() #USG has more than one ip address
+        self.ip = OrderedDict() #UDM has more than one ip address
         self.update_from_data()
         self.draw_device()
    
@@ -2096,21 +2131,39 @@ class UDM(NetworkDevice):
             self.text_override = True
             return
         self.text_override = False
+        self.text=[]
         try:
-
-            self.text= [ 'Load:%-14s OverTemp: %s' % (self.device_params['load'], 'Y' if self.data.get('overheating', False) else 'N'),
-                         'Mem:%-3d%% FW_VER: %s' % (self.device_params['mem'], self.device_params['fw_ver']),
-                         'UP:%-16s' % (self.device_params['uptime_text']),
-                       ]
-
-            if self.y_lines_text > 6:
-                self.text.append('MAC: %s' % self.device_params['mac'])
-                self.text.append('FW_VER: %s%s' % (self.device_params['fw_ver'], self.upgrade_text))
+            ips = []
+            lines = self.y_lines_text
             for name, ip  in self.ip.items():
                 if any(n in name for n in ['WAN', 'LAN']):
-                    self.text.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
+                    ips.append('%-3s: %s' % (name.upper(), ip if ip != '0.0.0.0' else 'DISABLED'))
+                    lines -= 1
+                if lines == 0:
+                    self.text.extend(ips)
+                    return
+                    
+            self.text_normal = ['Load:%-14s OverTemp: %s' % (self.device_params['load'], 'Y' if self.data.get('overheating', False) else 'N'),
+                                'UP:%-16s' % (self.device_params['uptime_text']),
+                                'Mem:%-3d%% FW_VER: %s' % (self.device_params['mem'], self.device_params['fw_ver']),
+                               ]
+                               
+            self.text_zoomed = [self.text_normal[0],
+                                self.text_normal[1],
+                                'Mem:%-3d%% CPU:%-3d%%' % (self.device_params['mem'], self.device_params['cpu']),
+                                'MAC: %s FW_VER: %s%s' % (self.device_params['mac'], self.device_params['fw_ver'], self.upgrade_text)
+                               ]
+                               
+            for y in range(lines):
+                try:
+                    self.text.append(self.text_zoomed[y] if self.zoomed else self.text_normal[y])
+                except IndexError:
+                    break
+                
+            self.text.extend(ips)            
+            
         except KeyError:
-            self.text = []
+            pass
         
     def update_from_data_device_specific(self):
         '''
@@ -2126,17 +2179,14 @@ class UDM(NetworkDevice):
         for port in self.data.get("port_table"):
             port_number = self.get_port_number(port)
             network_name = port.get('network_name', '').upper()
-            
-            if not port.get('up', False):
-                self.set_port_enabled(port_number, False)
-            else:
-                self.ip[network_name] = port.get('ip')  #get WAN ip's for enabled ports
-                
-            if self.ports[port_number].is_downlink == -1:
+            port_enabled = port.get('up', False)
+            if network_name and port_enabled:
+                self.ip[network_name] = port.get('ip', '')      #get WAN/LAN ip's for enabled ports
+            self.set_port_enabled(port_number, port_enabled)    #port may be enabled, but it's not up
+   
+            if port.get("is_uplink",False):                     #set uplink port name as network_name, eg WAN
                 self.set_port_name(port_number, network_name)
-            elif self.ports[port_number].is_downlink == 1:
-                self.set_port_name(port_number, network_name)
-            
+
     def extra_text(self):
         '''
         can override this for devices that aren't switches if you like
@@ -2156,8 +2206,16 @@ class UDM(NetworkDevice):
                         "tx_dropped",
                         "tx_errors",
                       ]
-                    
-        text.append('--WAN')
+                      
+        for port in self.ports.values():
+            name = port.org_name
+            if port.is_downlink==1:
+                name+=(' (uplink)')
+            elif port.is_downlink==-1:
+                name+=(' (downlink)')
+            text.append('%-2s: %s' % (port.port_number, name))
+                   
+        text.append('\n--WAN')    #new column
         if self.data.get("uplink"):
             for key, value in sorted(self.data["uplink"].items()):
                 if key in data_table+bytes_table:

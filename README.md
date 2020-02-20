@@ -4,7 +4,7 @@ A Websocket client for Unifi Controller and an example RPi based display program
 ## unifi_client.py
 The websocket client is `unifi_client.py`
 
-**NEW** Updated for Unifi OS device (like the UDM Pro). If you specify the port as 443 it is assumed that the controller is a Unifi OS device.
+**NEW** Updated for Unifi OS device (like the UDM Pro). Unifi OS device is detected automatically
 
 You can run it from the command line as an example, but mostly you would import it as a module.
 
@@ -41,8 +41,6 @@ optional arguments:
                         mqtt broker to publish sensor data to. (default=None)
   -p PORT, --port PORT  mqtt broker port (default=1883)
   -u USER, --user USER  mqtt broker username. (default=None)
-  -uos UNIFI_OS, --unifi_os UNIFI_OS
-                        UDM Pro connection (default=False)
   -pw PASSWD, --passwd PASSWD
                         mqtt broker password. (default=None)
   -pt PUB_TOPIC, --pub_topic PUB_TOPIC
@@ -98,8 +96,6 @@ optional arguments:
                         false)
   -c CUSTOM, --custom CUSTOM
                         use custom layout (default=None)
-  -uos, --unifi_os      is controller on a Unifi OS system like UDM? default
-                        False
   -l LOG, --log LOG     log file. (default=None)
   -D, --debug           debug mode
   -li, --list           list built in devices (for use in simulation)
@@ -111,7 +107,9 @@ optional arguments:
 
 `custom.ini` allows you to specify the position and size of each item on the display. An example `custom.ini` file is included.
 
-This is what it looks like:
+This is what it looks like (New UDMP):
+![Network Monitor](udmp.jpg)
+With old USG:
 ![Network Monitor](monitor.jpg)
 Detail Screen:
 ![Switch Screen](detail.jpg)
@@ -146,17 +144,17 @@ This will automatically start the monitor on boot if the pi is set to auto login
 If you log in via SSH, the monitor is not started.
 
 ### models.json file
-The `models.json` file contains values for every uniFi device, and overrides those built into `unifi.py`. You can edit it manually (to tweak values i may have got wrong), or you can update it semi-automatically using a utility included here `get_models.py`
+The `models.json` file contains values for every uniFi device, and overrides those built into `unifi.py`. You can edit it manually (to tweak values I may have got wrong), or you can update it semi-automatically using a utility included here `get_models.py`
 If you want to re-create the models.json file from scratch, just delete it, and it will be recreated from scratch when you run `unifi.py` (all your changes will be lost).
 
-The `models.json` file ust be in the same directory as the `unifi.py` program, and you cannot change the name. if the file does not exist, or is renames, it will be recreated when `unifi.py` is run, but will only have basic information in it. Some devices, especially new devices may not display properly in this case.
+The `models.json` file must be in the same directory as the `unifi.py` program, and you cannot change the name. if the file does not exist, or is renamed, it will be recreated when `unifi.py` is run, but will only have basic information in it. Some devices, especially new devices may not display properly in this case.
 
 The default `models.json` file supplied has all the UniFi controller data already added to it (this is a recommended option in `get_models.py`). If you recreate from scratch (as described above), this data will be lost. It can be re-added by running `get_models.py` as described below.
 
 I strongly suggest making a backup of the `models.json` file before doing anything to it.
 
 ## get_models.py
-This is a utility program to populate the `models.json` file with unifi devices information. the `models.json` file must exist first! See above.
+This is a utility program to populate the `models.json` file with unifi devices information. The `models.json` file will be re-created from scratch if it doesn't exist (if you use the `-up models.json` option. See above.
 
 ### Dependancies
 You need to install the following modules:
@@ -174,8 +172,9 @@ ie
 Here is the help text for get_models.py:
 ```
 pi@raspberrypi:~/unifi $ ./get_models.py -h
-usage: get_models.py [-h] [-f FILES] [-u URL] [-up UPDATE] [-o OUT]
-                     [-p PATTERN] [-a] [-l LOG] [-D] [-V]
+usage: get_models.py [-h] [-f FILES] [-u URL] [-U USER] [-P PASSWORD]
+                     [-up UPDATE] [-o OUT] [-p PATTERN] [-a] [-l LOG] [-D]
+                     [-V]
 
 extract model info from Unifi
 
@@ -185,6 +184,9 @@ optional arguments:
                         unifi files base location (default: /usr/lib/unifi)
   -u URL, --url URL     unifi url base location eg https://192.168.1.1:8443
                         (default: None)
+  -U USER, --user USER  unifi controller username (default: None)
+  -P PASSWORD, --password PASSWORD
+                        unifi controller password (default: None)
   -up UPDATE, --update UPDATE
                         models file to update eg models.json (default: None)
   -o OUT, --out OUT     output file name (default: models_tmp.json)
@@ -199,7 +201,7 @@ The default action is to try to retrieve model information from the controller f
 
 `./get_models.py -u https://192.168.x.x:8443 -up models.json`
 
-Where `192.168.x.x:8443` is the ip address and port of your UniFi controller (no login or password required).
+Where `192.168.x.x:8443` is the ip address and port of your UniFi controller. No login or password required, unless you have a UniFi OS device, in which case username and password **are required**.
 
 This will retrieve the javascript from your controller, extract the model information from it, ask you some easy questions, and finally update the `models.json` file.
 
@@ -211,11 +213,11 @@ One crucial question is:
 ```
 Do you want to add the full Unifi data to the database (recommended)?
 ```
-This adds the full data from the controller download to the `models.json` database. When you do this, it overrides all the default entries you just gave, and allows`unifi.py` to read the port layout correctly from the controller configuration (so the ports on the devices are drawn with the correct spacing). This is a good thing!
+This adds the full data from the controller download to the `models.json` database. When you do this, it overrides all the default entries you just gave, and allows`unifi.py` to read the port layout correctly from the controller configuration (so the ports on the devices are drawn with the correct spacing). This is a good thing! **I strongly recommend you do this**
 
-The supplied `models.json` file has all devices and unifi data in it (including beta devices) as of July 2019 (Controller Version 5.11.31).
+The supplied `models.json` file has all devices and unifi data in it (including beta devices) as of February 2020 (Controller Version 5.12.63).
 
-Finally save the updated file `Do you want to overwrite the models.json file?`, there is no default answer, you have to enter `y` to update the file. The previos `models.json` file will be saved as a backup file called `models.json.org` you can restore in case anything goes wrong.
+Finally save the updated file `Do you want to overwrite the models.json file?`, there is no default answer, you have to enter `y` to update the file. The previous `models.json` file will be saved as a backup file called `models.json.org` you can restore in case anything goes wrong.
 
 When you have updated the `models.json` file, start (or restart) `unifi.py`, and it will load the new database. Any new devices should now be displayed properly...
 
@@ -227,7 +229,7 @@ This utility is a WIP, so it might be a bit buggy. Works on my systems.
 When the client first connects, it pulls the confguration data for __all__ your devices, so the first data hit is large, after that only updates are received from the controller. The data is in the same format as it is received, ie a list of dictionaries (received as json text). The current state is stored in the client in `UnifiClient.unifi_data`, which is only updated when you call `UnifiClient.devices()`. There are methods for accessing this data, all of which call the devices() method internally, so use the methods, rather than accessing unifi_data directly. Only sync and events methods are exposed, other types of updates (speed test and so on) are displayed in debug mode, but otherwise ignored. It would be easy to add handling for these updates though if you need them for something. Feel free to fork your own version.
 
 ## Summary
-All is tested on Unifi 5.11.31, with FW 4.0.42/48. I have various AP's (UAP-AC-XX) some Unifi Switches and a USG (3 port).
+All is tested on Unifi 5.12.63, with UDMP FW 1.6.5-RC3. I have various AP's (UAP-AC-XX) some Unifi Switches and a UDM Pro (was a USG 3 port - now retired).
 
 Currently running on an RPi3, Python 3.5.3, but also works in my development environment (Ubuntu 18.04.1, Python 3.6.7).
 

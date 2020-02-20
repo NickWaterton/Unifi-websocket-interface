@@ -5,8 +5,10 @@
 # N Waterton 4th July 2019 V1.0: initial release
 # N Waterton 13th July 2019 V1.0.2 minor fixes.
 # N Waterton 10th Sep 2019 V1.0.3 minor fixes
+# N Waterton 17th Feb 2020 V2.0.0 add support for Unifi OS Devices (and others) reworked json finding method plus lots of other stuff
 
 import time, os, sys, json, re
+import requests
 from datetime import timedelta
 from collections import OrderedDict
 import hjson  #pip3 install hjson
@@ -15,7 +17,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 supported_devices=['UGW','USW','UAP','UDM']
 
-__VERSION__ = __version__ = '1.0.3'
+__VERSION__ = __version__ = '2.0.0'
 
 class progress_bar():
     '''
@@ -56,6 +58,26 @@ class progress_bar():
         sys.stdout.write(output)
         sys.stdout.flush()
         
+def is_unifi_os(url):
+        '''
+        check for Unifi OS controller eg UDM, UDM Pro.
+        HEAD request will return 200 id Unifi OS,
+        if this is a Standard controller, we will get 302 (redirect) to /manage
+        '''
+        # Disable insecure warnings - our server doesn't have root certs
+        from requests.packages.urllib3.exceptions import InsecureRequestWarning
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    
+        r = requests.head(url, verify=False, timeout=10.0)
+        if r.status_code == 200:
+            log.info('Unifi OS controller detected')
+            return True
+        if r.status_code == 302:
+            log.info('Unifi Standard controller detected')
+            return False
+        log.warning('Unable to determine controller type - using Unifi Standard controller')
+        return False
+        
 def newline():
     output = '\n'
     sys.stdout.write(output)
@@ -69,26 +91,63 @@ def deduplicate_list(input_list):
     return list(dict.fromkeys(input_list))
     
 def get_js_web_urls(url):
-    global requests
-    import requests #pip3 install requests
     
     from requests.packages.urllib3.exceptions import InsecureRequestWarning
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
     from bs4 import BeautifulSoup #pip3 install bs4
-    r = requests.get(url, verify=False, timeout=10)
-    soup = BeautifulSoup(r.content,features="html.parser")
+    try:
+        r = requests.get(url, verify=False, timeout=10)
+        assert r.status_code == 200
+        soup = BeautifulSoup(r.content,features="html.parser")
 
-    src = [sc["src"] for sc in  soup.select("script[src]")]
+        #src = [sc["src"] for sc in  soup.select("script[src]")]
+        src = [i.get('src') for i in soup.find_all('script') if i.get('src')] 
+    except (AssertionError, requests.ConnectionError, requests.Timeout) as e:
+        log.error("Connection failed error: %s" % e)
+    except Exception as e:
+        log.exception("unknown exception: %s" % e)
     return src
     
-def get_js_from_web(base_url,url,tempdir = 'tempDir'+os.sep):
-    log.info('retrieving js from: %s' % base_url+url)
+def get_js_web_urls_unifi_os(base_url):
+    '''
+    Unifi OS - get name of javascript file containing database
+    '''
+    pattern = re.compile(r".*UnifiDefaultsBasePath:(.*?),") #UnifiDefaultsBasePath: "angular/g3d24726/data/defaults",
+    src = []
+    from requests.packages.urllib3.exceptions import InsecureRequestWarning
+    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    try:
+        session = get_login_session(base_url)
+        r = session.get(base_url+'/app-assets/network/swai.js', verify=False, timeout=10)
+        assert r.status_code == 200
+        data = r.text
+        
+        match_iter = pattern.finditer(data)
+        for match in match_iter:
+            UnifiDefaultsBasePath = match.group(1)
+            log.debug('found match: %s' % UnifiDefaultsBasePath)
+            database_js = '/app-assets/network/angular/%s/js/app.js' % UnifiDefaultsBasePath.split('/')[1]
+            src.append(database_js)
+    except (AssertionError, requests.ConnectionError, requests.Timeout) as e:
+        log.error("Connection failed error: %s" % e)
+    except Exception as e:
+        log.exception("unknown exception: %s" % e)
 
+    return src
+    
+def get_js_from_web(base_url,url,tempdir = 'tempDir'+os.sep, unifi_os=False):
+    log.info('retrieving js from: %s' % base_url+url)
+    import ssl
     if not os.path.exists(tempdir):
         os.mkdir(tempdir)
     try:
         data = None
-        r = requests.get(base_url+url, verify=False, timeout=10)
+        if unifi_os:
+            session = get_login_session(base_url)
+            r = session.get(base_url+url, verify=False, timeout=10)
+        else:
+            r = requests.get(base_url+url, verify=False, timeout=10)
+        log.debug('status code: %s, headers: %s' % (r.status_code, r.headers))
         assert r.status_code == 200
         data = r.text
         if data:
@@ -103,6 +162,21 @@ def get_js_from_web(base_url,url,tempdir = 'tempDir'+os.sep):
         log.exception("unknown exception: %s" % e)
     
     return None
+    
+def get_login_session(base_url):
+    json_request = {    'username': arg.user,
+                        'password': arg.password,
+                        'strict': True
+                   }
+    session = requests.Session()
+    try:
+        r = session.post(base_url + '/api/auth/login', json=json_request, verify=False, timeout=10.0)
+        assert r.status_code == 200
+        log.debug('logged in')
+    except (AssertionError, requests.ConnectionError, requests.Timeout) as e:
+        log.error("Connection failed error: %s" % e)
+        return None
+    return session
     
 def get_js_files(unifi_dir):
     js_files = []
@@ -124,7 +198,6 @@ def find_models_file(files, pattern):
     return models_files
     
 def find_json(files, pattern_match, all=False):
-    pattern = re.compile(r".*\.exports=(\{.*?\}\}\}\})\}.*")
     json_obj = []
     for file in files:
         size = os.path.getsize(file)
@@ -136,11 +209,8 @@ def find_json(files, pattern_match, all=False):
                 pos += len(data)
                 #log.info("searching line: %d, %d%%" % (line, int(pos*100//size)))
                 progress.update(pos*100.0/size)
-                match_iter = pattern.finditer(data)
-                for match in match_iter:
-                    if pattern_match in match.group(1):
-                        json_string = match.group(1)
-                        json_string = json_string.replace("!0", "1").replace("!1", "0").strip()
+                for json_string in find_json_string(data, progress):
+                    if pattern_match in json_string:
                         try:
                             jsonObj = hjson.loads(json_string)
                             json_obj.append(jsonObj)
@@ -153,9 +223,41 @@ def find_json(files, pattern_match, all=False):
                         except json.decoder.JSONDecodeError as e:
                             newline()
                             log.error('Json Error: %s' % e)
+
         newline()                  
     log.info("Total Json matches found: %d" % len(json_obj))
     return json_obj
+    
+def find_json_string(data, progress):
+    '''
+    json string finder generator
+    '''
+    size = len(data)
+    json_string = ''
+    count = 0
+    start = False
+    for pos, char in enumerate(data):
+        if char == '{':
+            if start or count > 0:
+                count += 1
+        else:
+            start = False
+        if count > 0:
+            json_string += char
+
+        if char == '}' and count > 0:
+            count -= 1
+            
+        if char == '=':
+            start = True
+            
+        progress.update(pos*100.0/size)
+        
+        if count == 0 and len(json_string) > 0:
+            yield json_string.replace("!0", "1").replace("!1", "0").strip()
+            json_string = ''
+            count = 0
+            start = False
     
 def merge_dicts(a, b):
     c = a.copy()
@@ -168,9 +270,7 @@ def merge_dicts(a, b):
                 c[k]=v
         else:
             c[k]=v
-    return c
- 
-            
+    return c     
     
 def consolidate_json(json_list):
     json_obj = {}
@@ -197,143 +297,155 @@ def update_models(file, data):
         log.warn('Updating file: %s, press ^C if you want to exit!' % file)
         with open(file) as f:
             models = json.loads(f.read(), object_pairs_hook=OrderedDict)
+    else:
+        models = {}
             
-        new_models = OrderedDict()
-        #ensure we have an entry for each supported type (even if it's blank)
-        for type in supported_devices:
-            if not models.get(type):
-                models[type] = {}
-            new_models[type] = {}
-        log.info('NOTE! currently supported devices are: %s' % supported_devices)
-        
-        for device, info in data.items():
-            type = info['type'].upper()
-            result = True
-            if type in supported_devices and device not in models[type]:
-                #check for UDN
-                if type == 'UDM':
-                    new_models[type][device]=info   #add to models database (even though UDM section isn't currently used)
-                elif type == 'UAP':
-                    #all that is needed for AP's
-                    new_models[type][device]={}
-                    new_models[type][device]['name']=info['name']
-                    log.info('Added %s device: %s - %s' % (type, device, info['name']))
+    new_models = OrderedDict()
+    #ensure we have an entry for each supported type (even if it's blank)
+    for type in supported_devices:
+        if not models.get(type):
+            models[type] = {}
+        new_models[type] = {}
+    log.info('NOTE! currently supported devices are: %s' % supported_devices)
+    
+    for device, info in data.items():
+        type = info['type'].upper()
+        result = True
+        if type in supported_devices and device not in models[type]:
+            #check for UDM
+            if type == 'UDM':
+                new_models[type][device]=info   #add to models database
+            elif type == 'UAP':
+                #all that is needed for AP's
+                new_models[type][device]={}
+                new_models[type][device]['name']=info['name']
+                log.info('Added %s device: %s - %s' % (type, device, info['name']))
+                continue
+            else:
+                for existing_device, existing_info in models[type].items():
+                    if info['name'].upper() in existing_info['name'].upper():
+                        log.info('========New Device %s =========' % device)
+                        log.info('looks like %s - %s is similar to %s - %s' % (device, info['name'], existing_device, existing_info['name']))
+                        if query_yes_no("Do you want to copy it into the database? (if You select No, you can add it as a new device)"):
+                            new_models[type][device]=existing_info
+                            log.info('Device: %s copied' % new_models[type][device])
+                            result = False
+                        else:
+                            result = query_yes_no("Do you want to add it as a new device to the database?")
+                if not result:
                     continue
-                else:
-                    for existing_device, existing_info in models[type].items():
-                        if info['name'].upper() in existing_info['name'].upper():
-                            log.info('========New Device %s =========' % device)
-                            log.info('looks like %s - %s is similar to %s - %s' % (device, info['name'], existing_device, existing_info['name']))
-                            if query_yes_no("Do you want to copy it into the database? (if You select No, you can add it as a new device)"):
-                                new_models[type][device]=existing_info
-                                log.info('Device: %s copied' % new_models[type][device])
-                                result = False
-                            else:
-                                result = query_yes_no("Do you want to add it as a new device to the database?")
-                    if not result:
-                        continue
-                        
-                #new device
-                log.info('========New Device %s =========' % device)
-                log.info('found new device: %s - %s, type: %s' % (device, info['name'], type))
-                if not query_yes_no("Do you want to add it to the database?"):
-                    continue
-                else:
-                    #UDM only
-                    if type == 'UDM':
-                        log.info('This is a %s device, you have to choose what type of device to add it as' % type)
-                        while True:
-                            try:
-                                options = [{option: choice.upper()} for option, choice in enumerate(info['subtypes'])]
-                                sel_option = query_number('please select one of the following options: %s' % options, 0)
-                                type = info['subtypes'][sel_option].upper()
-                                break
-                            except exception as e:
-                                log.error('error: %s' % e)
-                                   
-                    #add new device name
-                    new_models[type][device]={}
-                    new_models[type][device]['name']=info['name']
-
-                    if type != 'UAP':   #only way for UAP to get here is if a UDM was selected as a UAP, this will skip over in that case.
-                        if info.get('features'):
-                            poe = info['features'].get('poe',0)
-                            new_models[type][device]['poe'] = True if poe == 1 else False
-                        
-                        if info.get('diagram'):
-                            diagram = info['diagram']
-                            log.info('here is a diagram of the device: %s' % pprint(diagram))
-                            rows = len(diagram)
-                        
-                        standard, sfp, sfp_plus = extract_ports_list(info['ports'])
-                        if len(standard) > 0:
-                            log.info('ports %s are standard ports' % standard )
-                        standard = len(standard)
-                        if len(sfp) > 0:
-                            log.info('ports %s are sfp ports' % sfp )
-                        sfp = len(sfp)
-                        if len(sfp_plus) > 0:
-                            log.info('ports %s are sfp+ ports' % sfp_plus )
-                        sfp_plus = len(sfp_plus)
-
-                        new_models[type][device]['ports']={'number':standard,'rows':0 if standard==0 else 1 if standard <= 8 else 2}
-                        new_models[type][device]['sfp']={'number':sfp,'rows': sfp if sfp < 2 else 2}   
-                        new_models[type][device]['sfp+']={'number':sfp_plus,'rows':sfp_plus if sfp_plus < 2 else 2}
-                        if standard > 0:
-                            rows = new_models[type][device]['ports']['rows']
-                            new_models[type][device]['ports']['rows'] = query_number('how many ROWS of standard ports are there? (eg, 1,2)', rows)
-                        if sfp > 0:
-                            rows = new_models[type][device]['sfp']['rows']
-                            new_models[type][device]['sfp']['rows'] = query_number('how many ROWS of sfp ports are there? (eg, 1,2)', rows)
-                        if sfp_plus > 0:
-                            rows = new_models[type][device]['sfp+']['rows']
-                            new_models[type][device]['sfp+']['rows'] = query_number('how many ROWS of sfp+ ports are there? (eg, 1,2)', rows)
-                        if sfp > 0 or sfp_plus > 0:
-                            while not new_models[type][device].get('order'):
-                                if query_yes_no("Are the first ports (from the left) standard ports?"):
-                                    new_models[type][device]['order'] = [0,1,2]
-                                else:
-                                    if query_yes_no("Are the first ports (from the left) sfp ports?"):
-                                        new_models[type][device]['order'] = [1,0,2]
-                                    else:
-                                        if query_yes_no("Are the first ports (from the left) sfp+ ports?"):
-                                            new_models[type][device]['order'] = [2,0,1]
-                                        else:
-                                            log.error('OK, the first ports must be standard, sfp, or sfp+ ports. try again')
-                                            
-                    log.debug('Device: %s added' % new_models[type][device])
-                    log.info('Device: %s added' % new_models[type][device]['name'])
                     
-        log.debug('The following new devices have been added: %s' % pprint(new_models))
-        log.info('New devices: %s' % get_summary(new_models))
-        all_models = OrderedDict()
-        all_models.update(models)
-        if not any([value for value in get_summary(new_models).values()]):
-            log.info('No New Models Found')
-            #return
-        else:
-            if query_yes_no("Do you want to add them to the database?"):
-                all_models = merge_dicts(models, new_models)
-                log.info('database updated')
-        if query_yes_no("Do you want to add the full Unifi data to the database (recommended)?"):
-            for type, devices in all_models.copy().items():
-                for device in devices:
-                    if device in data:
-                        #log.info("adding : %s to models[%s][%s]['unifi']" % (data[device], type, device))
-                        all_models[type][device]['unifi'] = data[device].copy()
-        log.debug('The following data will be written to the database: %s' % pprint(all_models))
-        log.info('total devices: %s' % get_summary(all_models))
-        if query_yes_no("Do you want to overwrite the %s file?" % file, None):
-            #backup original file
+            #new device
+            log.info('========New Device %s =========' % device)
+            log.info('found new device: %s - %s, type: %s' % (device, info['name'], type))
+            if not query_yes_no("Do you want to add it to the database?"):
+                continue
+            else:
+                #UDM only
+                '''
+                if type == 'UDM':
+                    log.info('This is a %s device, you have to choose what type of device to add it as' % type)
+                    while True:
+                        try:
+                            options = [{option: choice.upper()} for option, choice in enumerate(info['subtypes'])]
+                            sel_option = query_number('please select one of the following options: %s' % options, 0)
+                            type = info['subtypes'][sel_option].upper()
+                            break
+                        except exception as e:
+                            log.error('error: %s' % e)
+                '''               
+                #add new device name
+                new_models[type][device]={}
+                new_models[type][device]['name']=info['name']
+
+                if type != 'UAP':   #only way for UAP to get here is if a UDM was selected as a UAP, this will skip over in that case.
+                    
+                    
+                    if info.get('features'):
+                        poe = info['features'].get('poe',0)
+                        new_models[type][device]['poe'] = True if poe == 1 else False
+                    
+                    if info.get('rps'): #redundant power supply, has weird port definition
+                        info['diagram'] = info['rps'].get('diagram')
+                        info['primaryPortGroupCount'] = info['rps'].get('primaryPortGroupCount', 0)
+                        
+                    if info.get('diagram'):
+                        diagram = info['diagram']
+                        log.info('here is a diagram of the device: %s' % pprint(diagram))
+                        diagram_rows = len(diagram)
+                    else:
+                        diagram_rows = None
+                      
+                    standard, sfp, sfp_plus = extract_ports_list(info.get('ports', info.get('primaryPortGroupCount', 0))) #some new devices don't list ports
+                    if len(standard) > 0:
+                        log.info('ports %s are standard ports' % standard )
+                    standard = len(standard)
+                    if len(sfp) > 0:
+                        log.info('ports %s are sfp ports' % sfp )
+                    sfp = len(sfp)
+                    if len(sfp_plus) > 0:
+                        log.info('ports %s are sfp+ ports' % sfp_plus )
+                    sfp_plus = len(sfp_plus)
+
+                    new_models[type][device]['ports']={'number':standard,'rows':diagram_rows if diagram_rows is not None else 0 if standard==0 else 1 if standard <= 8 else 2}
+                    new_models[type][device]['sfp']={'number':sfp,'rows': sfp if sfp < 2 else 2}   
+                    new_models[type][device]['sfp+']={'number':sfp_plus,'rows':sfp_plus if sfp_plus < 2 else 2}
+                    if standard > 0:
+                        rows = new_models[type][device]['ports']['rows']
+                        new_models[type][device]['ports']['rows'] = query_number('how many ROWS of standard ports are there? (eg, 1,2)', rows)
+                    if sfp > 0:
+                        rows = new_models[type][device]['sfp']['rows']
+                        new_models[type][device]['sfp']['rows'] = query_number('how many ROWS of sfp ports are there? (eg, 1,2)', rows)
+                    if sfp_plus > 0:
+                        rows = new_models[type][device]['sfp+']['rows']
+                        new_models[type][device]['sfp+']['rows'] = query_number('how many ROWS of sfp+ ports are there? (eg, 1,2)', rows)
+                    if sfp > 0 or sfp_plus > 0:
+                        while not new_models[type][device].get('order'):
+                            if query_yes_no("Are the first ports (from the left) standard ports?"):
+                                new_models[type][device]['order'] = [0,1,2]
+                            else:
+                                if query_yes_no("Are the first ports (from the left) sfp ports?"):
+                                    new_models[type][device]['order'] = [1,0,2]
+                                else:
+                                    if query_yes_no("Are the first ports (from the left) sfp+ ports?"):
+                                        new_models[type][device]['order'] = [2,0,1]
+                                    else:
+                                        log.error('OK, the first ports must be standard, sfp, or sfp+ ports. try again')
+                                        
+                log.debug('Device: %s added' % new_models[type][device])
+                log.info('Device: %s added' % new_models[type][device]['name'])
+                
+    log.debug('The following new devices have been added: %s' % pprint(new_models))
+    log.info('New devices: %s' % get_summary(new_models))
+    all_models = OrderedDict()
+    all_models.update(models)
+    if not any([value for value in get_summary(new_models).values()]):
+        log.info('No New Models Found')
+        #return
+    else:
+        if query_yes_no("Do you want to add them to the database?"):
+            all_models = merge_dicts(models, new_models)
+            log.info('database updated')
+    if query_yes_no("Do you want to add the full Unifi data to the database (recommended)?"):
+        for type, devices in all_models.copy().items():
+            for device in devices:
+                if device in data:
+                    #log.info("adding : %s to models[%s][%s]['unifi']" % (data[device], type, device))
+                    all_models[type][device]['unifi'] = data[device].copy()
+    log.debug('The following data will be written to the database: %s' % pprint(all_models))
+    log.info('total devices: %s' % get_summary(all_models))
+    if query_yes_no("Do you want to overwrite the %s file?" % file, None):
+        #backup original file
+        if os.path.exists(file):
             from shutil import copyfile
             copyfile(file, file+'.org')
-            #write models file out
-            with open(file, 'w') as f:
-                f.write(pprint(all_models))
-            log.info('File: %s Updated' % file)
-            log.info('Total devices: %s' % get_summary(all_models))
-        else:
-            log.info('File: %s NOT updated' % file)
+        #write models file out
+        with open(file, 'w') as f:
+            f.write(pprint(all_models))
+        log.info('File: %s Updated' % file)
+        log.info('Total devices: %s' % get_summary(all_models))
+    else:
+        log.info('File: %s NOT updated' % file)
             
 def extract_ports_list(ports):
     '''
@@ -341,19 +453,22 @@ def extract_ports_list(ports):
     eg ([0,1,2,3], [4,5],[])
     (standard []. sfp[], sfp_plus[])
     NOTE, USG's start at port 0, but switches start at port 1.
+    NOTE: some new devices don't list ports so we get an integer of port count
     '''
     standard = []
     sfp = []
     sfp_plus = []
+    if isinstance(ports, int):
+        standard = ports_list_decode(ports)
     if isinstance(ports, (list, dict)):
-        #standard = [x for x in range(1,len(ports)+1,1)]
         standard = [x for x in range(len(ports))]
-    if ports.get('standard'):
-        standard = ports_list_decode(ports['standard'])
-    if ports.get('sfp'):
-        sfp = ports_list_decode(ports['sfp'])
-    if ports.get('plus'):
-        sfp_plus = ports_list_decode(ports['plus'])
+    if isinstance(ports, dict):
+        if ports.get('standard'):
+            standard = ports_list_decode(ports['standard'])
+        if ports.get('sfp'):
+            sfp = ports_list_decode(ports['sfp'])
+        if ports.get('plus'):
+            sfp_plus = ports_list_decode(ports['plus'])
 
     return standard, sfp, sfp_plus
         
@@ -467,10 +582,13 @@ def main():
     Main routine
     '''
     global log
+    global arg
     import argparse
     parser = argparse.ArgumentParser(description='extract model info from Unifi')
     parser.add_argument('-f','--files', action="store", default='/usr/lib/unifi', help='unifi files base location (default: /usr/lib/unifi)')
     parser.add_argument('-u','--url', action="store", default=None, help='unifi url base location eg https://192.168.1.1:8443 (default: None)')
+    parser.add_argument('-U','--user', action="store", default=None, help='unifi controller username (default: None)')
+    parser.add_argument('-P','--password', action="store", default=None, help='unifi controller password (default: None)')
     parser.add_argument('-up','--update', action="store", default=None, help='models file to update eg models.json (default: None)')
     parser.add_argument('-o','--out', action="store", default='models_tmp.json', help='output file name (default: models_tmp.json)')
     parser.add_argument('-p','--pattern', action="store", default='U7HD', help='pattern to search for (default; U7HD)')
@@ -507,24 +625,34 @@ def main():
     try:
         start = time.time()
         js_files = []
+        unifi_os = False
         if arg.url:
             log.info("Downloading javascript files, this can take a while...")
             tmpdir = 'tempDir'+os.sep
             if arg.debug and os.path.exists(tmpdir):
                 arg.files = tmpdir
             else:
-                base_url = arg.url+'/manage/'
-                src = get_js_web_urls(base_url)
+                unifi_os = is_unifi_os(arg.url)
+                if unifi_os:
+                    if arg.user is None or arg.password is None:
+                        log.warn('please supply username and password for your controller, needed for UniFi OS devices like UDM')
+                        parser.print_help(sys.stderr)
+                        sys.exit(1)  
+                    base_url = arg.url
+                    src = get_js_web_urls_unifi_os(base_url)
+                else:
+                    base_url = arg.url+'/manage/'
+                    src = get_js_web_urls(base_url)
                 for url in src:
-                    file = get_js_from_web(base_url,url,tmpdir)
+                    file = get_js_from_web(base_url,url,tmpdir,unifi_os)
                     if file:
                         js_files.append(file)
         #log.info('found js files : %s' % js_files)
         if len(js_files) == 0:
             if not os.path.exists(arg.files):
                 log.warn('This has to be run on the unifi controller, not your display device!')
-                lop.warn('please supply a URL for your controller to run from your display device (eg -u https://192.168.1.1:8443)')
-                os.exit(1)
+                log.warn('please supply a URL for your controller to run from your display device (eg -u https://192.168.1.1:8443)')
+                sys.exit(1)
             log.warn("Searching for models data in %s, This can take quite a while to run on large files!" % arg.files)
             js_files = get_js_files(arg.files)
         models_files = find_models_file(js_files, arg.pattern)
