@@ -84,6 +84,7 @@ Here is an example of publishing to an mqtt broker:
 ```
 import paho.mqtt.client as paho
 from unifi_client import UnifiClient
+import json
 import logging
 log = logging.getLogger('Main')
 
