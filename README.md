@@ -155,7 +155,7 @@ The default `models.json` file supplied has all the UniFi controller data alread
 I strongly suggest making a backup of the `models.json` file before doing anything to it.
 
 ## get_models.py
-This is a utility program to populate the `models.json` file with unifi devices information. The `models.json` file will be re-created from scratch if it doesn't exist (if you use the `-up models.json` option. See above.
+This is a utility program to populate the `models.json` file with unifi devices information. The `models.json` file will be re-created from scratch if it doesn't exist (if you use the `-up models.json` option). See above.
 
 ### Dependancies
 You need to install the following modules:
@@ -214,7 +214,7 @@ One crucial question is:
 ```
 Do you want to add the full Unifi data to the database (recommended)?
 ```
-This adds the full data from the controller download to the `models.json` database. When you do this, it overrides all the default entries you just gave, and allows`unifi.py` to read the port layout correctly from the controller configuration (so the ports on the devices are drawn with the correct spacing). This is a good thing! **I strongly recommend you do this**
+This adds the full data from the controller download to the `models.json` database. When you do this, it overrides all the default entries you just gave, and allows`unifi.py` to read the port layout correctly from the controller configuration (so the ports on the devices are drawn with the correct spacing). This is a good thing! **I strongly recommend you do this**.
 
 The supplied `models.json` file has all devices and unifi data in it (including beta devices) as of February 2020 (Controller Version 5.12.63).
 

@@ -28,8 +28,9 @@
 # N Waterton V 1.2.3 13th February    added basic support for UDM Pro
 # N Waterton V 1.2.4 15th February    added enhanced support for UDM Pro
 # N Waterton V 1.3.0 20th February    major re-write for UDM Pro, new category of device "udm"
+# N Waterton V 1.3.1 21st February    added api call feature to get UDMP temperature
 
-__VERSION__ = '1.3.0'
+__VERSION__ = '1.3.1'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -41,6 +42,7 @@ import random, time
 import json
 import sys, os
 from multiprocessing import Process, Value, Queue
+import queue
 from subprocess import check_output
 from collections import OrderedDict
 try:
@@ -287,6 +289,9 @@ class UnifiApp(Grx.Application):
         #multiprocess stuff
         self.exit = Value('i', 0)   #False
         self.q = Queue()
+        self.send_q = Queue()
+        self.data_q = Queue()
+        self.extra_data = None
             
         self.worker = Process(target=self.get_unifi_data)
         self.worker.daemon=True
@@ -464,13 +469,20 @@ class UnifiApp(Grx.Application):
                     self.update.value+=1
                 log.info('Refreshing Data')
                 if self.arg.simulate:
+                    while not self.send_q.empty():
+                        self.send_q.get()    #empty send queue
                     if simulate_update:
                         devices = self.arg.simulate
                         simulate_update = False
                     else:
                         time.sleep(5)
                 else:
-                    devices = client.devices()
+                    devices = client.devices()  #will block here until device update is received
+                    if not self.send_q.empty():
+                        command = self.send_q.get()
+                        log.info('Sending API command: %s' % command)
+                        data = client.api(command)
+                        self.data_q.put(data)
                 self.q.put(devices)
                 log.info('Data Updated')
             except Exception as e:
@@ -482,6 +494,7 @@ class UnifiApp(Grx.Application):
                 with open('data.json', 'w') as f:
                     f.write(json.dumps(devices, indent=2))
         self.q.close()
+        self.client = None
         
     def deduplicate_list(self, base_list):
         temp=OrderedDict()
@@ -559,6 +572,8 @@ class UnifiApp(Grx.Application):
             while not self.q.empty():
                 devices+=self.q.get()
             self.devices = self.update_list(self.devices, devices)
+            if not self.data_q.empty():
+                self.extra_data = self.data_q.get()
         else:
             devices = self.devices
 
@@ -654,18 +669,18 @@ class UnifiApp(Grx.Application):
                         ports+=port.get("num_port",0)
                     if type == 'usw':
                         log.info('creating switch: %s' % name)
-                        devices[id]=(NetworkSwitch(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]))
+                        devices[id]=(NetworkSwitch(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type], parent=self))
                         #Vertical spacing of switches increment next switch this many down
                         last_y_pos = y = devices[id].device_bottom + self.text_height//2
                     elif type == 'ugw':
                         log.info('creating usg: %s' % name)
-                        devices[id]=(USG(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]))
+                        devices[id]=(USG(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type], parent=self))
                         #Vertical spacing of usg's increment next switch this many down (of course should only be one...)
                         last_y_pos = y = devices[id].device_bottom + self.text_height//2
                         log.info('USG right: %s' % devices[id].device_right)
                     elif type == 'udm':
                         log.info('creating udm: %s' % name)
-                        devices[id]=(UDM(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]))
+                        devices[id]=(UDM(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type], parent=self))
                         #Vertical spacing of udm's increment next switch this many down (of course should only be one...)
                         last_y_pos = y = devices[id].device_bottom + self.text_height//2
                         log.info('UDM right: %s' % devices[id].device_right)
@@ -676,7 +691,7 @@ class UnifiApp(Grx.Application):
                         extra_text = self.ap_extra_text
                         port_size = max(port_size,self.min_port_size)
                         log.info('creating uap: %s at x: %s, spacing: %s port_size: %s, extra_text: %s' % (name, x, spacing, port_size, extra_text))
-                        devices[id]=(UAP(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]+extra_text, dry_run=self.ap_spacing is None))
+                        devices[id]=(UAP(x,y, ports, device, model=model, port_size=port_size, text_lines=self.text_lines[type]+extra_text, dry_run=self.ap_spacing is None, parent=self))
                         new_port_size=devices[id].port_height
                         ap_ports+=devices[id].num_ports
                         device_height=devices[id].device_height
@@ -1056,8 +1071,9 @@ class NetworkDevice():
             
     type='usw'  #default switch type
 
-    def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
+    def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1, parent=None):
         self.load_models()
+        self.parent = parent
         self.init(x, y, data, model, ports, SFP, SFP_PLUS, POE, port_size, 8, 14, text_lines) #x,y offset of ports, number or lines of text above ports
       
         self.init_rows(self.rows)
@@ -1227,6 +1243,34 @@ class NetworkDevice():
         self.clean = False
         
         self.initial_port_data = {}
+     
+    def api(self, command):
+        '''
+        Send api request to UnifiClient
+        Only the GET method is supported
+        NOTE UnifiClient is running in a separate process, and blocks until
+             updated data is received from the websocket, so there will be an undetermined
+             wait time before the request is fulfilled.
+        Because of this wait, we time out after 5 seconds, and return the result of the last
+        call on the next call to this method
+        This is used to get the UDMP temperature as it's not in the websocket event data.
+        USE WITH CAUTION!
+        '''
+        try:
+            if self.parent is not None:
+                if not self.parent.data_q.empty():
+                    log.warning('Previous API data results found - returning')
+                    extra_data = self.parent.data_q.get()
+                    return extra_data
+                self.parent.send_q.put(command)
+                extra_data = self.parent.data_q.get(block=True, timeout=5)  #wait 5 seconds for response
+                return extra_data
+                
+        except queue.Empty:
+            log.error('No Response to API command %s' % command)
+        except Exception as e:
+            log.error('Error sending API command: %s' % e)
+        return None
     
     @classmethod
     def load_models(cls):
@@ -1498,7 +1542,7 @@ class NetworkDevice():
         if self.device_params.get('upgrade', False):
             self.outline = self.yellow
         device_text_opts.set_fg_color(self.outline)
-        device_text_opts.set_bg_color(self.bg_color)
+        device_text_opts.set_bg_color(self.black)
         name = name[:self.box_width]
         text_width = device_text_opts.get_font().get_text_width(name)
         self.device_center = self.x+(self.device_right-self.x)//2
@@ -1671,7 +1715,28 @@ class NetworkDevice():
             if txt != self.previous_settings.get(line,None):
                 #log.info('%s: drawing line: %d, %s' % (self.name, line, txt))
                 Grx.draw_filled_box(self.x+self.text_offset, text_top, self.x+self.device_width-2, text_top+self.text_height, self.bg_color) #2 is the border line width
-                Grx.draw_text(txt[:self.box_width-1], self.x+self.text_offset, text_top, device_text_opts)
+                if '!' in txt:  #use ! to indicate WARNING text
+                    split_txt = txt[:self.box_width-1].split('!')
+                    alternate = True
+                    x_offset = self.x+self.text_offset  
+                    for wrn_txt in split_txt:
+                        if alternate:
+                            colour = self.bg_color
+                            device_text_opts.set_fg_color(self.white)
+                            device_text_opts.set_bg_color(self.bg_color)
+                        else:
+                            colour = self.red
+                            device_text_opts.set_fg_color(self.yellow)
+                            device_text_opts.set_bg_color(colour)
+                        x_right = min(x_offset + len(wrn_txt)*self.text_width, self.x+self.device_width-2)
+                        Grx.draw_filled_box(x_offset, text_top, x_right, text_top+self.text_height, colour) #2 is the border line width
+                        Grx.draw_text(wrn_txt, x_offset, text_top, device_text_opts)
+                        x_offset+= len(wrn_txt)*self.text_width
+                        alternate = not alternate
+                    device_text_opts.set_fg_color(self.white)
+                    device_text_opts.set_bg_color(self.bg_color)
+                else:
+                    Grx.draw_text(txt[:self.box_width-1], self.x+self.text_offset, text_top, device_text_opts)
                 self.previous_settings[line] = txt
             
         self.clean = True
@@ -2019,8 +2084,8 @@ class NetworkSwitch(NetworkDevice):
                 'USXG' : {'ports':{'number':4, 'rows':1}, 'poe':False, 'sfp':{'number':0, 'rows':0}, 'sfp+':{'number':12, 'rows':2}, 'order': [2,0,1], 'name': 'Unifi Switch 16XG'},
                 }
 
-    def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1):
-        super().__init__(x, y, ports=ports, data=data, model=model, SFP=SFP, SFP_PLUS=SFP_PLUS, POE=POE, port_size=port_size, text_lines=text_lines)
+    def __init__(self, x, y, ports=24, data=None, model=None, SFP=0, SFP_PLUS=0, POE=False, port_size=0, text_lines=1, parent=None):
+        super().__init__(x, y, ports=ports, data=data, model=model, SFP=SFP, SFP_PLUS=SFP_PLUS, POE=POE, port_size=port_size, text_lines=text_lines, parent=parent)
 
 class USG(NetworkDevice):
 
@@ -2032,8 +2097,9 @@ class USG(NetworkDevice):
              
     type='ugw'  #USG (gateway) type
 
-    def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
+    def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5, parent=None):
         self.load_models()
+        self.parent = parent
         self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
  
         self.init_rows(self.rows)
@@ -2114,8 +2180,9 @@ class UDM(NetworkDevice):
              
     type='udm'  #UDM (gateway) type
 
-    def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5):
+    def __init__(self, x, y, ports=3, data=None, model=None, port_size=0, text_lines=5, parent=None):
         self.load_models()
+        self.parent = parent
         self.init(x, y, data, model, ports, 0, 0, False, port_size, 24, 14, text_lines)
  
         self.init_rows(self.rows)
@@ -2124,7 +2191,7 @@ class UDM(NetworkDevice):
         self.draw_device()
    
     def set_text(self, text=None): 
-        #override this with each devices metrics text
+        #override this with each devices metrics text (! indicates start and stop of warning text)
         if text is not None:
             self.text = text
             self.clean = False
@@ -2143,14 +2210,27 @@ class UDM(NetworkDevice):
                     self.text.extend(ips)
                     return
                     
-            self.text_normal = ['Load:%-14s OverTemp: %s' % (self.device_params['load'], 'Y' if self.data.get('overheating', False) else 'N'),
+            #try to get UDM temperature
+            temp = self.device_params.get("temp")
+            overheating = self.data.get('overheating', None)
+            warning = '!' if overheating else ''
+            if temp is not None:
+                temperature = '%s%-5.2f°C%s' % (warning,temp,warning)
+            else:
+                temperature = '%sOverTemp: %s%s' % (warning,'?' if overheating is None else 'Y' if overheating else 'N',warning)
+            
+            warning = '!' if self.device_params['mem'] > 80 else ''    
+            memory = '%sMem:%-3d%%%s' % (warning, self.device_params['mem'], warning)
+            
+                
+            self.text_normal = ['Load:%-14s %s' % (self.device_params['load'], temperature),
                                 'UP:%-16s' % (self.device_params['uptime_text']),
-                                'Mem:%-3d%% FW_VER: %s' % (self.device_params['mem'], self.device_params['fw_ver']),
+                                '%s FW_VER: %s' % (memory, self.device_params['fw_ver']),
                                ]
                                
             self.text_zoomed = [self.text_normal[0],
                                 self.text_normal[1],
-                                'Mem:%-3d%% CPU:%-3d%%' % (self.device_params['mem'], self.device_params['cpu']),
+                                '%s CPU:%-3d%%' % (memory, self.device_params['cpu']),
                                 'MAC: %s FW_VER: %s%s' % (self.device_params['mac'], self.device_params['fw_ver'], self.upgrade_text)
                                ]
                                
@@ -2170,6 +2250,16 @@ class UDM(NetworkDevice):
         Override this with specific data for devices other than switches
         '''
         #log.info('UDM self.data: %s' % json.dumps(self.data, indent=2))
+        #api/system to get device info like ["cpu"]["temperature']
+        
+        try:
+            extra_data = self.api('api/system') #get lots of UDM specific data, looking for temperature here
+            if extra_data is not None:
+                if extra_data.get('cpu'):
+                    self.data["general_temperature"] = extra_data['cpu'].get('temperature', None)
+                    log.info('Updated UDM temperature to : %s' % self.data["general_temperature"])
+        except Exception as e:
+            log.error('Error getting extra UDM data: %s' % e)
   
         for network in self.data.get("network_table"):  #get LANS
             name = network.get('name','').upper()
@@ -2296,9 +2386,10 @@ class UAP(NetworkDevice):
              
     type='uap'  #AP type
 
-    def __init__(self, x, y, ports=2, data=None, model=None, port_size=0, text_lines=3, dry_run=False):  
+    def __init__(self, x, y, ports=2, data=None, model=None, port_size=0, text_lines=3, dry_run=False, parent=None):  
         log.info('AP: %s, ports = %d' % (model,ports))
         self.load_models()
+        self.parent = parent
         
         x_offset = 8
         if ports == 1:  #make single port AP's a bit wider (so we can fit more text in)

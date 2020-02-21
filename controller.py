@@ -344,7 +344,7 @@ class Controller(object):
         raise APIError("No site %s found" % name)
         
     def get_site_test(self):
-        return self._read(self.url+'ws/system')
+        return self._read(self.url+'api/device/general')
         
     def get_system_info(self):
         return self._read(self.url+'api/system')

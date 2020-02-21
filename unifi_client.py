@@ -2,7 +2,7 @@
 #
 # unifi_client.py
 #
-# Copyright (c) 2019 Nick Waterton <nick.waterton@med.ge.com>
+# Copyright (c) 2019,2020 Nick Waterton <nick.waterton@med.ge.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,23 +23,31 @@
 # N Waterton 10th September 2019 V1.1.2: added "sta:sync" message type found in controller 5.11.39
 # N Waterton 13th February  2020 V 1.1.3: added basic support for UDM Pro
 # N Waterton 15th February  2020 V 1.1.4: added enhanced support for UDM Pro
+# N Waterton 21st February  2020 V 1.1.5: added api call feature
 
 '''
-core: {
-				base: "/api",
-				paths: {
-					apps: "/apps",
-					deviceInfo: "/device",
-					info: "/info",
-					login: "/auth/login",
-					logout: "/auth/logout",
-					self: "/users/self",
-					status: "/status",
-					system: "/system",
-					systemWs: "/ws/system"
-				}
-			}
-
+Not all of these work, but good starting point...
+apps: "/api/apps",
+system: "/api/system",
+firmwareUpdate: "/api/firmware/update",
+firmwareSchedule: "/api/firmware/schedule",
+device: {
+    general: "/api/device/general"
+},
+controller: "/api/controllers",
+status: "/status",
+login: "/auth/login",
+logout: "/auth/logout",
+rebootDevice: "/api/system/reboot",
+powerOff: "/api/system/poweroff",
+factoryReset: "/api/system/reset",
+eraseAndFormat: "/api/storage/eraseAndFormat",
+sshEnable: "/api/system/ssh/enable",
+sshPassword: "/api/system/ssh/setpassword",
+location: "/api/system/location",
+timezone: "/api/system/timezone",
+systemWS: "/api/ws/system",
+downloadSupportFile: "/api/support/generate"
 '''
 
 from __future__ import print_function
@@ -58,7 +66,7 @@ from collections import OrderedDict
 import logging
 from logging.handlers import RotatingFileHandler
 
-__VERSION__ = '1.1.4'
+__VERSION__ = '1.1.5'
 
 log = logging.getLogger('Main')
 
@@ -72,6 +80,8 @@ class UnifiClient(object):
         self.ssl_verify = ssl_verify
         self.timeout = timeout
         self.unifi_os = unifi_os
+        self.client = None
+        self.session = None
         
         if self.unifi_os is None:
             self.unifi_os = self.is_unifi_os()
@@ -85,6 +95,7 @@ class UnifiClient(object):
             self.url = 'https://{}:{}/'.format(self.host, self.port)
             self.ws_url= 'wss://{}:{}/wss/s/default/events'.format(self.host, self.port)
             self.login_url = self.url + 'api/login'
+        self.base_url = 'https://{}:{}/'.format(self.host, self.port)
         self.initial_info_url = self.url + 'api/s/default/stat/device'
         self.params = {'_depth': 4, 'test': 0}
         
@@ -128,6 +139,17 @@ class UnifiClient(object):
         log.warning('Unable to determine controller type - using Unifi Standard controller')
         return False
         
+    def api(self, command):
+        if self.client is None:
+            log.error('no client connected')
+        else:
+            try:
+                return self.client.api(command)
+            except Exception as e:
+                log.error('Error in API call: %s' % e)
+            
+        return None
+        
     def connect_websocket(self):
         '''
         connect python 2 or 3 websocket
@@ -135,9 +157,9 @@ class UnifiClient(object):
         '''
         if sys.version_info[0] == 3 and sys.version_info[1] > 3:
             from unifi_client_3 import UnifiClient3 #has to be in separate module to prevent python2 syntax errors
-            UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
+            self.client = UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
         else:
-            UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
+            self.client = UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
         
     def update_unifi_data(self, data):
         '''
@@ -306,6 +328,22 @@ class UnifiClient2(UnifiClient):
             self.simple_websocket()
             time.sleep(30)
             log.warn('Reconnecting websocket')
+            
+    def api(self, command):
+        if self.session is not None:
+            try:
+                r = self.session.get(self.base_url+command, verify=self.ssl_verify, timeout=self.timeout)
+                assert r.status_code == 200
+
+                data = r.json()
+                
+                log.debug('received API response: %s' % json.dumps(data, indent=2))
+                return data
+            except (AssertionError, requests.ConnectionError, requests.Timeout) as e:
+                log.error('API call %s failed: %s' % (command,e))
+            except Exception as e:
+                log.exception("API command exception: %s" % e)
+        return None      
 
     def simple_websocket(self):
         import requests
@@ -325,6 +363,7 @@ class UnifiClient2(UnifiClient):
         
         session = requests.Session()# This session is used to login and obtain a session ID
         session.verify = self.ssl_verify # not really needed as we disable checking in the post anyway
+        self.session = session
         
         try:
         
@@ -344,10 +383,14 @@ class UnifiClient2(UnifiClient):
             cookies = requests.utils.dict_from_cookiejar(session.cookies)
             log.debug('cookies: %s' % cookies)
             #cookies example: {'csrf_token': 'icIkv3tcVjwlJ4TQbgyeCuEZiJGErAUy', 'unifises': 'nutupuMKrLC4eA6CRmS6yWcldWowJRT2'
-            csrf_token = cookies['csrf_token']
-            SESSIONID = cookies['unifises']
-            ws_cookies = "unifises=%s; csrf_token=%s" % (SESSIONID, csrf_token)
-            
+            if self.unifi_os:
+                SESSIONID = cookies.get('TOKEN')
+                ws_cookies = "TOKEN=%s" % (SESSIONID)
+            else:
+                csrf_token = cookies.get('csrf_token')
+                SESSIONID = cookies.get('unifises')
+                ws_cookies = "unifises=%s; csrf_token=%s" % (SESSIONID, csrf_token)
+  
             #optional debugging on
             if log.getEffectiveLevel() == logging.DEBUG:
                 websocket.enableTrace(True)
@@ -374,7 +417,8 @@ class UnifiClient2(UnifiClient):
             log.error("Connection failed error: %s" % e)
         except Exception as e:
             log.exception("unknown exception: %s" % e)
-               
+            
+        self.session = None       
         log.info('Exited')
         
 def setup_logger(logger_name, log_file, level=logging.DEBUG, console=False):
