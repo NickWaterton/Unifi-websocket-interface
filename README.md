@@ -4,7 +4,8 @@ A Websocket client for Unifi Controller and an example RPi based display program
 ## unifi_client.py
 The websocket client is `unifi_client.py`
 
-**NEW** Updated for Unifi OS device (like the UDM Pro). Unifi OS device is detected automatically
+**NEW** Updated for Unifi OS device (like the UDM Pro). Unifi OS device is detected automatically.
+**NOTE** For Unifi OS devices (like UDMP), where you have to specify a port, the UDMP port is 433 (not the default 8443). You must enter this or the default 8443 will be used, and this will not work!
 
 You can run it from the command line as an example, but mostly you would import it as a module.
 
@@ -58,6 +59,53 @@ Example command lines:
 - `./unifi_client.py 192.168.x.x username password -D` with debugging output so that you can see the data
 - `./unifi_client.py 192.168.x.x username password -po 8444` different default unifi port
 - `./unifi_client.py 192.168.x.x username password -b 192.168.x.y` publish data to your mqtt broker at 192.168.x.y (no mqtt user or password)
+
+**NOTE** The websocket client also has an `api` method, so you can sent api requests to the controller and get a json (ie dictionary) response when using the websocket client as well.
+For example, if you define a client like this:
+```
+client = UnifiClient(username, password, IP, unifi_port, ssl_verify=False)
+```
+
+Then you can access the api interface by using:
+```
+data = client.api('api/system')
+```
+Where `api/system` is the api call to get lots of info about the UDM.
+`data` will contain the dictionary response, or `None` if there was an error.
+
+You access the websocket data by calling:
+```
+data = client.devices()
+```
+Where `data` is the new event data (as a list of dictionaries), received from the controller. By default this is a blocking call (use `client.devices(blocking=False)` if you don't want to block).
+Returns a list of device updates. If blocking, waits for a new update, then returns it as a list. If not blocking, returns any updates in the queue, or a list with an empty dict if there are none
+
+Here is an example of publishing to an mqtt broker:
+```
+import paho.mqtt.client as paho
+from unifi_client import UnifiClient
+import logging
+log = logging.getLogger('Main')
+
+port = 1833
+broker = "broker ip"
+user = None         #MQTT user
+password = None     #MQTT password
+
+mqttc = paho.Client()               #Setup MQTT
+if user is not None and password is not None:
+    mqttc.username_pw_set(username=user,password=password)
+mqttc.connect(broker, port, 120)
+mqttc.loop_start()
+client = UnifiClient(unifi_username, unifi_password, IP, unifi_port, ssl_verify=False)  #supply Unifi controller username,password,ip,port here
+while True:
+    data = client.devices()
+    log.info('got new data')
+    mqttc.publish(arg.pub_topic, json.dumps(data))
+    log.debug(json.dumps(data, indent=2))
+mqttc.loop_stop()
+```
+See the bottom of `unifi_client.py` for the full working example.
 
 ## unifi.py
 `unifi.py` is an example __Python 3__ program using unifi_client.py to update a network status display on an RPi3 (800x600 size). It uses some obscure graphics libraries, so it's not easy to get working, but it's more of an example of how to get and use the data than anything else.
@@ -226,6 +274,7 @@ This utility is a WIP, so it might be a bit buggy. Works on my systems.
 
 ## controller.py
 `controller.py` is a module that gives access to the unifi API, and can be used for simple REST access to unifi data. it's cobbled together from various sources on the web (thanks to the contributors), I just added to it, it's not my work as such.
+**NOTE** The websocket client also has an `api` method, see the websocket section for details
 
 When the client first connects, it pulls the confguration data for __all__ your devices, so the first data hit is large, after that only updates are received from the controller. The data is in the same format as it is received, ie a list of dictionaries (received as json text). The current state is stored in the client in `UnifiClient.unifi_data`, which is only updated when you call `UnifiClient.devices()`. There are methods for accessing this data, all of which call the devices() method internally, so use the methods, rather than accessing unifi_data directly. Only sync and events methods are exposed, other types of updates (speed test and so on) are displayed in debug mode, but otherwise ignored. It would be easy to add handling for these updates though if you need them for something. Feel free to fork your own version.
 
