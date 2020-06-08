@@ -29,8 +29,9 @@
 # N Waterton V 1.2.4 15th February    added enhanced support for UDM Pro
 # N Waterton V 1.3.0 20th February    major re-write for UDM Pro, new category of device "udm"
 # N Waterton V 1.3.1 21st February    added api call feature to get UDMP temperature
+# N Waterton V 1.3.2 4th  June 2020   removed api call for UDMP temperature, and added handling for UDMP temperature in update_from_data()
 
-__VERSION__ = '1.3.1'
+__VERSION__ = '1.3.2'
 
 import gi
 gi.require_version('GLib', '2.0')
@@ -1253,7 +1254,7 @@ class NetworkDevice():
              wait time before the request is fulfilled.
         Because of this wait, we time out after 5 seconds, and return the result of the last
         call on the next call to this method
-        This is used to get the UDMP temperature as it's not in the websocket event data.
+        This is used to get the UDMP temperature as it's not in the websocket event data (update 4/6/2020 - now it is!).
         USE WITH CAUTION!
         '''
         try:
@@ -1841,7 +1842,13 @@ class NetworkDevice():
             if max_power > 0 and max_power != self.max_power:
                 self.max_power = max_power
                 log.info('Max POE power updated to %dW' % self.max_power)
-            self.update_data(    temp=self.data.get("general_temperature", None),
+            temp = self.data.get("general_temperature", None)
+            #this is how UDMP reports temperatures (CPU, Local, PHY)
+            if temp is None:
+                for temps in self.data.get("temperatures", []):
+                    if temps.get('name', 'none') == 'CPU':
+                        temp = temps.get('value', 0)
+            self.update_data(    temp=temp,
                                  power_voltage=self.data.get("power_source_voltage", None),
                                  fan=self.data.get("fan_level", 0),
                                  power=total_power*100//max(1,self.max_power),
@@ -2252,6 +2259,8 @@ class UDM(NetworkDevice):
         #log.info('UDM self.data: %s' % json.dumps(self.data, indent=2))
         #api/system to get device info like ["cpu"]["temperature']
         
+        #removed NW 4/6/2020 as cpu temperature is now reported in websocket data type "device:sync" and 'device:update"
+        '''
         try:
             extra_data = self.api('api/system') #get lots of UDM specific data, looking for temperature here
             if extra_data is not None:
@@ -2260,7 +2269,8 @@ class UDM(NetworkDevice):
                     log.info('Updated UDM temperature to : %s' % self.data["general_temperature"])
         except Exception as e:
             log.error('Error getting extra UDM data: %s' % e)
-  
+        '''
+        
         for network in self.data.get("network_table"):  #get LANS
             name = network.get('name','').upper()
             if name:

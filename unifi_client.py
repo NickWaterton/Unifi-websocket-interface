@@ -24,6 +24,7 @@
 # N Waterton 13th February  2020 V 1.1.3: added basic support for UDM Pro
 # N Waterton 15th February  2020 V 1.1.4: added enhanced support for UDM Pro
 # N Waterton 21st February  2020 V 1.1.5: added api call feature
+# N Waterton 4th  June      2020 V 1.1.6: reduced logging from device:update and sta:sync messages (now debug only)     
 
 '''
 Not all of these work, but good starting point...
@@ -66,7 +67,7 @@ from collections import OrderedDict
 import logging
 from logging.handlers import RotatingFileHandler
 
-__VERSION__ = '1.1.5'
+__VERSION__ = '1.1.6'
 
 log = logging.getLogger('Main')
 
@@ -104,6 +105,8 @@ class UnifiClient(object):
         self.unifi_data = OrderedDict()
         #keep track of unknown message types
         self.message_types = {}
+        #keep track of mac to id's, if id missing
+        self.mac_id = {}
 
         #pass queues to child classes
         if q is None:
@@ -178,6 +181,7 @@ class UnifiClient(object):
                 new_data={update["_id"]:update}
                 unifi_data.update(new_data)
                 log.info('Updating: %s (%s)' % (update["_id"], unifi_data[update["_id"]].get("name",'Unknown')))
+                #log.info('data: %s' % json.dumps(unifi_data, indent=2))
             self.sync_q.put(unifi_data)
             
         elif update_type == "events":
@@ -188,16 +192,19 @@ class UnifiClient(object):
             self.event_q.put(data['data'])
             
         elif update_type == "device:update":
-            log.info('received update: %s' % json.dumps(data, indent=2))
+            log.debug('received device:update: message')
+            log.debug('received update: %s' % json.dumps(data, indent=2))
             #do something with updates here
+            #note now receive temperature readings from udmp here (but also in device:sync, so ignore here).
         elif update_type == "user:sync":
-            log.info('received sync: %s' % json.dumps(data, indent=2))
+            log.info('received user:sync: message')
+            log.debug('received sync: %s' % json.dumps(data, indent=2))
             #do something with user syncs here
         elif update_type == "speed-test:update":
             log.debug('received speedtest: %s' % json.dumps(data, indent=2))
             #do something with speed tests here
         elif update_type == "sta:sync":
-            log.info('received sta:sync: message')
+            log.debug('received sta:sync: message')
             log.debug('\n: %s' % json.dumps(data, indent=2))
             #do something with station sync here
             
