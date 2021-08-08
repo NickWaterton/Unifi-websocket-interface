@@ -1,6 +1,13 @@
 # Unifi-websocket-interface
 A Websocket client for Unifi Controller and an example RPi based display program.
 
+# Install Manually
+Update the repository URL accordingly
+
+```
+pip install git+https://github.com/blambo10/Unifi-websocket-interface.git
+```
+
 ## unifi_client.py
 The websocket client is `unifi_client.py`
 
@@ -63,6 +70,8 @@ Example command lines:
 **NOTE** The websocket client also has an `api` method, so you can sent api requests to the controller and get a json (ie dictionary) response when using the websocket client as well.
 For example, if you define a client like this:
 ```
+from pyunifiwsi import UnifiClient
+
 client = UnifiClient(username, password, IP, unifi_port, ssl_verify=False)
 ```
 
