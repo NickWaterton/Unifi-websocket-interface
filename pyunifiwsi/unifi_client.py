@@ -159,7 +159,7 @@ class UnifiClient(object):
         Would need to be fixed for python 4.x...
         '''
         if sys.version_info[0] == 3 and sys.version_info[1] > 3:
-            from unifi_client_3 import UnifiClient3 #has to be in separate module to prevent python2 syntax errors
+            from .unifi_client_3 import UnifiClient3 #has to be in separate module to prevent python2 syntax errors
             self.client = UnifiClient3(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)
         else:
             self.client = UnifiClient2(self.username,self.password,self.host,self.port,self.ssl_verify,self.queues,self.timeout,self.unifi_os)

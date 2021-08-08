@@ -38,7 +38,7 @@ from logging.handlers import RotatingFileHandler
 
 log = logging.getLogger('Main')
 
-from unifi_client import UnifiClient
+from .unifi_client import UnifiClient
         
 class UnifiClient3(UnifiClient):
     '''
