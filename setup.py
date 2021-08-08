@@ -3,14 +3,14 @@ from setuptools import setup, find_packages
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '0.1.0'
+VERSION = '1.0'
 PACKAGE_NAME = 'pyunifiwsi'
-AUTHOR = 'You'
-AUTHOR_EMAIL = 'you@email.com'
+AUTHOR = 'Nick Waterton'
+AUTHOR_EMAIL = 'nick.waterton@med.ge.com'
 URL = 'https://github.com/NickWaterton/Unifi-websocket-interface'
 
-LICENSE = 'Apache License 2.0'
-DESCRIPTION = 'Describe your package in one sentence'
+LICENSE = 'GNU General Public License'
+DESCRIPTION = 'A Websocket client for Unifi Controller and an example RPi based display program'
 LONG_DESCRIPTION = (HERE / "README.md").read_text()
 LONG_DESC_TYPE = "text/markdown"
 
