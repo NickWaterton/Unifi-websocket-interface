@@ -1,2 +1,2 @@
-from unifi_client import UnifiClient
-from unifi_client_3 import UnifiClient3
+from unifi_client import *
+from unifi_client_3 import *
