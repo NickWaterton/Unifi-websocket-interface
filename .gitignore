@@ -3,3 +3,6 @@ data.json
 *.log
 __pycache__
 keyring.tar.gz
+build/
+dist/
+pyunifiwsi.egg-info/
