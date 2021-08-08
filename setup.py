@@ -20,7 +20,8 @@ INSTALL_REQUIRES = [
       'requests',
       'hjson',
       'bs4',
-      
+      'aiohttp',
+      'asyncio',
 ]
 
 setup(name=PACKAGE_NAME,
