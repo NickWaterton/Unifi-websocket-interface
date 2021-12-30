@@ -123,7 +123,8 @@ class UnifiClient3(UnifiClient):
                         log.debug(json.dumps(json_response, indent=2))
 
                 async with session.get(
-                        self.initial_info_url,json=self.params, ssl=self.ssl_verify, timeout=self.timeout) as response:
+                        #json=self.params does not work with latest controller version (6.5.x)
+                        self.initial_info_url, ssl=self.ssl_verify, timeout=self.timeout) as response:
                         assert response.status == 200
                         json_response = await response.json()
                         log.debug('Received json response to initial data:')
